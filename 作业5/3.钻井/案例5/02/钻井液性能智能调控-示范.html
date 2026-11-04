@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>钻井液性能智能调控 · 示范</title>
+<style>
+  :root{
+    --jade:#2f7d6b; --jade-d:#235f51; --jade-l:#e6f1ec;
+    --clay:#b26a39; --clay-l:#f8ecdf;
+    --opt:#41699b; --opt-l:#e7eef9;
+    --ink:#242b2e; --ink-2:#4d565b; --ink-3:#79828a; --ink-4:#9ba3a9;
+    --line:#e9e4d8; --line-2:#ddd7c8; --line-3:#c9c2b0;
+    --card:#ffffff; --soft:#fdfcf9; --paper:#fbfaf6;
+    --ok:#3f8560; --warn:#a97a1c; --bad:#b05a51;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:16px 18px 22px; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .kick{ font-family:var(--mono); font-size:9px; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--jade-d); }
+  h1{ font-size:17px; font-weight:650; margin:7px 0 0; letter-spacing:-.01em; }
+  .desc{ margin:7px 0 0; font-size:12px; color:var(--ink-3);
+    line-height:1.7; max-width:80ch; }
+  .desc b{ color:var(--ink-2); }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) 236px;
+    gap:12px; margin-top:14px; align-items:start; }
+  .stage{ background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:9px 10px 8px; min-width:0; }
+  .stage svg{ display:block; width:100%; height:auto; }
+  .legend{ display:flex; flex-wrap:wrap; gap:11px; margin-top:8px;
+    font-size:9.8px; color:var(--ink-4); }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend i{ width:12px; height:2.5px; border-radius:1px; display:block; }
+  .legend i.dash{ height:0; border-top:1px dashed currentColor; background:none !important; }
+  .legend i.box{ height:10px; border-radius:2px; }
+
+  .side{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .metric{ background:var(--card); padding:8px 9px; }
+  .metric .l{ font-family:var(--mono); font-size:7.4px; letter-spacing:.07em;
+    color:var(--ink-4); white-space:nowrap; }
+  .metric .v{ font-family:var(--mono); font-size:15px; margin-top:4px;
+    line-height:1; color:var(--ink); }
+  .metric .v small{ font-size:8px; color:var(--ink-4); margin-left:2px; }
+  .metric.good .v{ color:var(--ok); }
+  .metric.warn .v{ color:var(--warn); }
+  .metric.bad .v{ color:var(--bad); }
+
+  .verdict{ font-size:11.2px; line-height:1.7; color:var(--ink-2);
+    border-left:2.5px solid var(--line-2); padding-left:9px; }
+  .verdict b{ color:var(--ink); }
+  .verdict.ok{ border-color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); }
+
+  .card{ border:1px solid var(--line); border-radius:8px;
+    background:var(--soft); padding:9px 10px; }
+  .card h5{ margin:0 0 6px; font-family:var(--mono); font-size:7.6px;
+    letter-spacing:.1em; color:var(--ink-4); font-weight:400; text-transform:uppercase; }
+  table{ width:100%; border-collapse:collapse; font-size:9.6px; }
+  th{ font-family:var(--mono); font-size:7.2px; letter-spacing:.06em;
+    color:var(--ink-4); font-weight:400; text-align:right; padding:3px 0 4px;
+    border-bottom:1px solid var(--line-2); }
+  td{ padding:3px 0; border-bottom:1px solid var(--line); color:var(--ink-3);
+    text-align:right; font-family:var(--mono); white-space:nowrap; }
+  th:first-child,td:first-child{ text-align:left; font-family:inherit; }
+  tr:last-child td{ border-bottom:0; }
+  td.ok{ color:var(--ok); } td.warn{ color:var(--warn); } td.bad{ color:var(--bad); }
+
+  .rateRow{ display:flex; align-items:center; gap:6px; margin:4px 0; }
+  .rateRow span.k{ font-family:var(--mono); font-size:8.6px; color:var(--ink-4);
+    width:46px; flex:0 0 46px; }
+  .rateRow span.bar{ flex:1; height:7px; background:var(--line); border-radius:2px;
+    overflow:hidden; }
+  .rateRow span.bar i{ display:block; height:100%; border-radius:2px; }
+  .rateRow span.v{ font-family:var(--mono); font-size:9.2px; width:34px;
+    text-align:right; color:var(--ink-2); }
+
+  .ctrls{ display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+    margin-top:11px; padding:11px 14px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; }
+  .ctl{ display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--ink-2); }
+  .ctl label{ font-family:var(--mono); font-size:9px; letter-spacing:.06em;
+    color:var(--ink-3); white-space:nowrap; }
+  .ctl input[type=range]{ -webkit-appearance:none; appearance:none;
+    width:112px; height:4px; border-radius:2px; background:var(--line-2);
+    outline:none; cursor:pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid var(--card); box-shadow:0 0 0 1px var(--jade); cursor:grab; }
+  .ctl input[type=range]::-moz-range-thumb{ width:13px; height:13px;
+    border-radius:50%; background:var(--jade); border:2.5px solid var(--card); cursor:grab; }
+  .ctl .val{ font-family:var(--mono); font-size:10.5px; color:var(--jade-d);
+    min-width:56px; text-align:right; }
+
+  @media (max-width:780px){
+    body{ padding:13px 13px 18px; }
+    .grid{ grid-template-columns:1fr; }
+    .ctrls{ gap:11px; }
+    .ctl{ width:100%; justify-content:space-between; }
+    .ctl input[type=range]{ flex:1; width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="kick">INTERACTIVE · 密度窗口</div>
+<h1>窗口只剩 0.04 时，余地有多大</h1>
+<p class="desc">
+  绿色带是安全窗口：下界孔隙压力（低一点气侵），上界破裂压力（高一点井漏）。
+  拖密度、排量、井深，看 ECD 怎么在窗口里挤。<b>注意排量那一项</b>——
+  ECD = 密度 + 循环附加，所以「静止时安全」不等于「循环时安全」。
+</p>
+
+<div class="grid">
+  <div class="stage">
+    <svg id="chart" viewBox="0 0 620 272" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="孔隙压力、破裂压力与 ECD 的密度窗口"></svg>
+    <div class="legend">
+      <span><i class="box" style="background:#e6f1ec;border:1px solid #2f7d6b"></i>安全窗口</span>
+      <span><i style="background:#41699b"></i>孔隙压力</span>
+      <span><i style="background:#b26a39"></i>破裂压力</span>
+      <span><i class="dash" style="color:#2f7d6b"></i>ECD</span>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="metrics" id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h5>同一密度 · 三档排量</h5>
+      <div id="rateBars"></div>
+      <p style="margin:6px 0 0;font-size:9.4px;color:var(--ink-4);line-height:1.6">
+        柱长为 ECD，右列为是否在窗口内。排量越大，ECD 越高。
+      </p>
+    </div>
+    <div class="card">
+      <h5>窗口随井深</h5>
+      <table id="tbl"></table>
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <div class="ctl">
+    <label>密度 g/cm³</label>
+    <input type="range" id="s-mw" min="125" max="165" step="1" value="146">
+    <span class="val" id="v-mw">1.46</span>
+  </div>
+  <div class="ctl">
+    <label>排量 L/s</label>
+    <input type="range" id="s-rate" min="28" max="60" step="2" value="48">
+    <span class="val" id="v-rate">48</span>
+  </div>
+  <div class="ctl">
+    <label>井深 m</label>
+    <input type="range" id="s-depth" min="3200" max="4100" step="50" value="3900">
+    <span class="val" id="v-depth">3900</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     一、模型
+     ---------------------------------------------------------
+     pore(d) = 1.30 + t × 0.16      → 1.30 … 1.46
+     frac(d) = 1.60 − t × 0.10      → 1.60 … 1.50
+     窗口：0.30 → 0.04（随井深收窄）
+     ECD = 密度 + 排量 × 0.0011
+     ========================================================= */
+  var DEP0 = 3200, DEP1 = 4100;
+  var DMIN = 1.25, DMAX = 1.65;
+  var KECD = 0.0011;
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function pore(d) { return 1.30 + (d - DEP0) / (DEP1 - DEP0) * 0.16; }
+  function frac(d) { return 1.60 - (d - DEP0) / (DEP1 - DEP0) * 0.10; }
+  function ecdOf(mw, rate) { return mw + rate * KECD; }
+
+  /* =========================================================
+     二、绘图
+     ========================================================= */
+  var SW = 620, SH = 272;
+  var L = 52, R = 18, T = 22, B = 38;
+  var X0 = L, X1 = SW - R, Y0 = T, Y1 = SH - B;
+
+  function X(v) { return X0 + (v - DMIN) / (DMAX - DMIN) * (X1 - X0); }
+  function Y(d) { return Y0 + (d - DEP0) / (DEP1 - DEP0) * (Y1 - Y0); }
+
+  function drawChart(st) {
+    var mw = st.mw, rate = st.rate, d = st.depth;
+    var ecd = ecdOf(mw, rate);
+    var p = pore(d), f = frac(d);
+
+    var state, col;
+    if (ecd < p) { state = 'low'; col = '#b05a51'; }
+    else if (ecd > f) { state = 'high'; col = '#b05a51'; }
+    else if (Math.min(ecd - p, f - ecd) < 0.02) { state = 'tight'; col = '#a97a1c'; }
+    else { state = 'ok'; col = '#2f7d6b'; }
+
+    var s = '';
+    s += '<rect width="' + SW + '" height="' + SH + '" fill="#ffffff"/>';
+
+    /* 网格 */
+    [1.30, 1.40, 1.50, 1.60].forEach(function (v) {
+      s += '<line x1="' + X(v).toFixed(1) + '" y1="' + Y0 + '" x2="' + X(v).toFixed(1) +
+        '" y2="' + Y1 + '" stroke="#f4f1e9"/>';
+      s += '<text x="' + X(v).toFixed(1) + '" y="' + (Y1 + 15) +
+        '" font-size="7.6" fill="#9ba3a9" text-anchor="middle" ' +
+        'font-family="ui-monospace,monospace">' + v.toFixed(2) + '</text>';
+    });
+    [3200, 3500, 3800, 4100].forEach(function (dd) {
+      s += '<line x1="' + X0 + '" y1="' + Y(dd).toFixed(1) + '" x2="' + X1 +
+        '" y2="' + Y(dd).toFixed(1) + '" stroke="#f4f1e9"/>';
+      s += '<text x="' + (X0 - 6) + '" y="' + (Y(dd) + 3).toFixed(1) +
+        '" font-size="7.4" fill="#9ba3a9" text-anchor="end" ' +
+        'font-family="ui-monospace,monospace">' + dd + '</text>';
+    });
+
+    s += '<rect x="' + X0 + '" y="' + Y0 + '" width="' + (X1 - X0) +
+      '" height="' + (Y1 - Y0) + '" fill="none" stroke="#ddd7c8"/>';
+
+    /* 安全窗口多边形 */
+    var n = 20, up = '', dn = '', i;
+    for (i = 0; i <= n; i++) {
+      var dd2 = DEP0 + (DEP1 - DEP0) * i / n;
+      up += (i ? 'L' : 'M') + X(pore(dd2)).toFixed(1) + ' ' + Y(dd2).toFixed(1);
+    }
+    for (i = n; i >= 0; i--) {
+      var dd3 = DEP0 + (DEP1 - DEP0) * i / n;
+      dn += 'L' + X(frac(dd3)).toFixed(1) + ' ' + Y(dd3).toFixed(1);
+    }
+    s += '<path d="' + up + dn + 'Z" fill="#e6f1ec" fill-opacity=".85"/>';
+
+    /* 两条边界曲线 */
+    s += '<path d="' + up + '" fill="none" stroke="#41699b" stroke-width="1.7"/>';
+    s += '<path d="' + dn + '" fill="none" stroke="#b26a39" stroke-width="1.7"/>';
+
+    /* ECD 竖线 */
+    s += '<line x1="' + X(ecd).toFixed(1) + '" y1="' + Y0 +
+      '" x2="' + X(ecd).toFixed(1) + '" y2="' + Y1 +
+      '" stroke="' + col + '" stroke-width="2" stroke-dasharray="5 3"/>';
+
+    /* 当前井深横线 */
+    s += '<line x1="' + X0 + '" y1="' + Y(d).toFixed(1) + '" x2="' + X1 +
+      '" y2="' + Y(d).toFixed(1) + '" stroke="#9ba3a9" stroke-width="1" ' +
+      'stroke-dasharray="3 4" stroke-opacity=".8"/>';
+    s += '<text x="' + (X1 - 2) + '" y="' + (Y(d) - 6).toFixed(1) +
+      '" font-size="7.8" fill="#79828a" text-anchor="end" ' +
+      'font-family="ui-monospace,monospace">' + Math.round(d) + ' m</text>';
+
+    /* 当前点 */
+    s += '<circle cx="' + X(ecd).toFixed(1) + '" cy="' + Y(d).toFixed(1) +
+      '" r="4.2" fill="' + col + '" stroke="#ffffff" stroke-width="1.4"/>';
+
+    /* 该深度上的窗口余量标注 */
+    var winLeft = X(p), winRight = X(f);
+    s += '<line x1="' + winLeft.toFixed(1) + '" y1="' + (Y(d) + 9).toFixed(1) +
+      '" x2="' + winRight.toFixed(1) + '" y2="' + (Y(d) + 9).toFixed(1) +
+      '" stroke="#235f51" stroke-width="1.6"/>';
+    s += '<line x1="' + winLeft.toFixed(1) + '" y1="' + (Y(d) + 5).toFixed(1) +
+      '" x2="' + winLeft.toFixed(1) + '" y2="' + (Y(d) + 13).toFixed(1) +
+      '" stroke="#235f51" stroke-width="1.2"/>';
+    s += '<line x1="' + winRight.toFixed(1) + '" y1="' + (Y(d) + 5).toFixed(1) +
+      '" x2="' + winRight.toFixed(1) + '" y2="' + (Y(d) + 13).toFixed(1) +
+      '" stroke="#235f51" stroke-width="1.2"/>';
+    s += '<text x="' + ((winLeft + winRight) / 2).toFixed(1) + '" y="' +
+      (Y(d) + 22).toFixed(1) + '" font-size="7.6" fill="#235f51" ' +
+      'text-anchor="middle" font-family="ui-monospace,monospace">窗口 ' +
+      (f - p).toFixed(3) + '</text>';
+
+    /* 轴标题 */
+    s += '<text x="2" y="' + (Y0 - 8) + '" font-size="7.6" fill="#9ba3a9" ' +
+      'font-family="ui-monospace,monospace">井深 ↓</text>';
+    s += '<text x="' + X1 + '" y="' + (SH - 6) + '" font-size="7.6" fill="#9ba3a9" ' +
+      'text-anchor="end" font-family="ui-monospace,monospace">当量密度 g/cm³ →</text>';
+
+    document.getElementById('chart').innerHTML = s;
+    return { state: state, ecd: ecd, pore: p, frac: f, win: f - p };
+  }
+
+  /* =========================================================
+     三、侧栏
+     ========================================================= */
+  function drawSide(st, r) {
+    var dPore = r.ecd - r.pore;
+    var dFrac = r.frac - r.ecd;
+
+    function cls(margin) {
+      if (margin > 0.02) return 'good';
+      if (margin > 0) return 'warn';
+      return 'bad';
+    }
+
+    var winCls = r.win < 0.05 ? 'bad' : r.win < 0.09 ? 'warn' : 'good';
+
+    document.getElementById('metrics').innerHTML =
+      '<div class="metric ' + winCls + '"><div class="l">窗口宽度</div>' +
+        '<div class="v">' + r.win.toFixed(3) + '<small></small></div></div>' +
+      '<div class="metric"><div class="l">ECD</div><div class="v">' +
+        r.ecd.toFixed(3) + '<small></small></div></div>' +
+      '<div class="metric ' + cls(dPore) + '"><div class="l">下界余量</div>' +
+        '<div class="v">' + dPore.toFixed(3) + '<small></small></div></div>' +
+      '<div class="metric ' + cls(dFrac) + '"><div class="l">上界余量</div>' +
+        '<div class="v">' + dFrac.toFixed(3) + '<small></small></div></div>';
+
+    /* 判词 */
+    var vEl = document.getElementById('verdict'), html, vc;
+
+    if (r.state === 'low') {
+      vc = 'bad';
+      html = 'ECD 低于孔隙压力：<b>地层流体会进来</b>。现场表现是返出流量上升、' +
+        '钻井液密度下降。<b>要么提密度，要么降排量——但降排量只能救一点</b>。';
+    } else if (r.state === 'high') {
+      vc = 'bad';
+      html = 'ECD 高于破裂压力：<b>正在把地层压开</b>。此时排量越大漏得越快。' +
+        '注意：<b>静止时可能是安全的</b>，这正是这类事故最容易被忽视的原因。';
+    } else if (r.state === 'tight') {
+      vc = 'warn';
+      html = '还在窗口内，但<b>余量已小于 0.02</b>。这时应该降排量或微调密度，' +
+        '而不是等下一次班测——<b>窗口只有 ' + r.win.toFixed(3) + '，容错很小</b>。';
+    } else {
+      vc = 'ok';
+      html = 'ECD 落在窗口内，上下余量分别是 <b>' + dPore.toFixed(3) + '</b> 与 <b>' +
+        dFrac.toFixed(3) + '</b>。但记住：<b>排量一升 ECD 就上去</b>。';
+    }
+
+    vEl.className = 'verdict ' + vc;
+    vEl.innerHTML = html;
+
+    /* 三档排量的 ECD */
+    var bars = '', rates = [28, 42, 60], i;
+    for (i = 0; i < 3; i++) {
+      var rt = rates[i];
+      var e = ecdOf(st.mw, rt);
+      var rel = clamp((e - DMIN) / (DMAX - DMIN) * 100, 2, 100);
+      var c, lab;
+      if (e < r.pore) { c = '#b05a51'; lab = '欠'; }
+      else if (e > r.frac) { c = '#b05a51'; lab = '漏'; }
+      else if (Math.min(e - r.pore, r.frac - e) < 0.02) { c = '#a97a1c'; lab = '紧'; }
+      else { c = '#2f7d6b'; lab = '✓'; }
+
+      bars += '<div class="rateRow">' +
+        '<span class="k">' + rt + ' L/s</span>' +
+        '<span class="bar"><i style="width:' + rel.toFixed(0) + '%;background:' + c +
+        ';opacity:.8"></i></span>' +
+        '<span class="v" style="color:' + c + '">' + lab + '</span></div>';
+    }
+    document.getElementById('rateBars').innerHTML = bars;
+
+    /* 窗口随井深表 */
+    var rows = '', depths = [3200, 3500, 3800, 4100];
+    for (i = 0; i < depths.length; i++) {
+      var dd = depths[i], w = frac(dd) - pore(dd);
+      var cur = Math.abs(dd - st.depth) < 25;
+      var c2 = w < 0.05 ? 'bad' : w < 0.09 ? 'warn' : 'ok';
+      rows += '<tr><td' + (cur ? ' style="color:#242b2e;font-weight:600"' : '') + '>' +
+        dd + (cur ? ' ●' : '') + '</td>' +
+        '<td class="' + c2 + '">' + w.toFixed(3) + '</td></tr>';
+    }
+    document.getElementById('tbl').innerHTML =
+      '<thead><tr><th>井深 m</th><th>窗口</th></tr></thead><tbody>' + rows + '</tbody>';
+  }
+
+  /* =========================================================
+     四、主循环
+     ========================================================= */
+  var sMw = document.getElementById('s-mw');
+  var sRate = document.getElementById('s-rate');
+  var sDepth = document.getElementById('s-depth');
+  var vMw = document.getElementById('v-mw');
+  var vRate = document.getElementById('v-rate');
+  var vDepth = document.getElementById('v-depth');
+
+  var state = { mw: 1.46, rate: 48, depth: 3900 };
+
+  function paint() {
+    state.mw = Number(sMw.value) / 100;
+    state.rate = Number(sRate.value);
+    state.depth = Number(sDepth.value);
+
+    vMw.textContent = state.mw.toFixed(2);
+    vRate.textContent = state.rate;
+    vDepth.textContent = state.depth;
+
+    var r = drawChart(state);
+    drawSide(state, r);
+  }
+
+  sMw.addEventListener('input', paint);
+  sRate.addEventListener('input', paint);
+  sDepth.addEventListener('input', paint);
+
+  paint();
+
+})();
+</script>
+
+</body>
+</html>

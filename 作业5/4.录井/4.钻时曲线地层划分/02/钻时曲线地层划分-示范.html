@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>钻时曲线地层划分 · 示范</title>
+<style>
+  :root{
+    --jade:#2f7d6b; --jade-d:#235f51; --jade-l:#e6f1ec;
+    --clay:#b26a39; --clay-l:#f8ecdf;
+    --opt:#41699b; --opt-l:#e7eef9;
+    --ink:#242b2e; --ink-2:#4d565b; --ink-3:#79828a; --ink-4:#9ba3a9;
+    --line:#e9e4d8; --line-2:#ddd7c8; --line-3:#c9c2b0;
+    --card:#ffffff; --soft:#fdfcf9; --paper:#fbfaf6;
+    --ok:#3f8560; --warn:#a97a1c; --bad:#b05a51;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:16px 18px 22px; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .kick{ font-family:var(--mono); font-size:9px; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--jade-d); }
+  h1{ font-size:17px; font-weight:650; margin:7px 0 0; letter-spacing:-.01em; }
+  .desc{ margin:7px 0 0; font-size:12px; color:var(--ink-3);
+    line-height:1.7; max-width:82ch; }
+  .desc b{ color:var(--ink-2); }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) 240px;
+    gap:12px; margin-top:14px; align-items:start; }
+  .stage{ background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:9px 10px 8px; min-width:0; }
+  .stage svg{ display:block; width:100%; height:auto; }
+  .legend{ display:flex; flex-wrap:wrap; gap:11px; margin-top:8px;
+    font-size:9.8px; color:var(--ink-4); }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend i{ width:13px; height:2.5px; border-radius:1px; display:block; }
+  .legend i.dash{ height:0; border-top:1px dashed currentColor; background:none !important; }
+  .legend i.box{ height:10px; border-radius:2px; }
+  .cap{ font-size:10px; color:var(--ink-4); margin-top:6px; line-height:1.6; }
+
+  .side{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .metric{ background:var(--card); padding:8px 9px; }
+  .metric .l{ font-family:var(--mono); font-size:7.4px; letter-spacing:.07em;
+    color:var(--ink-4); white-space:nowrap; }
+  .metric .v{ font-family:var(--mono); font-size:15px; margin-top:4px;
+    line-height:1; color:var(--ink); }
+  .metric .v small{ font-size:8px; color:var(--ink-4); margin-left:2px; }
+  .metric.good .v{ color:var(--ok); }
+  .metric.warn .v{ color:var(--warn); }
+  .metric.bad .v{ color:var(--bad); }
+
+  .verdict{ font-size:11.2px; line-height:1.7; color:var(--ink-2);
+    border-left:2.5px solid var(--line-2); padding-left:9px; }
+  .verdict b{ color:var(--ink); }
+  .verdict.ok{ border-color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); }
+
+  .card{ border:1px solid var(--line); border-radius:8px;
+    background:var(--soft); padding:9px 10px; }
+  .card h5{ margin:0 0 6px; font-family:var(--mono); font-size:7.6px;
+    letter-spacing:.1em; color:var(--ink-4); font-weight:400; text-transform:uppercase; }
+  table{ width:100%; border-collapse:collapse; font-size:9.4px; }
+  th{ font-family:var(--mono); font-size:7.2px; letter-spacing:.06em;
+    color:var(--ink-4); font-weight:400; text-align:right; padding:3px 0 4px;
+    border-bottom:1px solid var(--line-2); }
+  td{ padding:3px 0; border-bottom:1px solid var(--line); color:var(--ink-3);
+    text-align:right; font-family:var(--mono); white-space:nowrap; }
+  th:first-child,td:first-child{ text-align:left; font-family:inherit; }
+  tr:last-child td{ border-bottom:0; }
+  td.ok{ color:var(--ok); } td.warn{ color:var(--warn); } td.bad{ color:var(--bad); }
+
+  .ctrls{ display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+    margin-top:11px; padding:11px 14px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; }
+  .ctl{ display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--ink-2); }
+  .ctl label{ font-family:var(--mono); font-size:9px; letter-spacing:.06em;
+    color:var(--ink-3); white-space:nowrap; }
+  .ctl input[type=range]{ -webkit-appearance:none; appearance:none;
+    width:118px; height:4px; border-radius:2px; background:var(--line-2);
+    outline:none; cursor:pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid var(--card); box-shadow:0 0 0 1px var(--jade); cursor:grab; }
+  .ctl input[type=range]::-moz-range-thumb{ width:13px; height:13px;
+    border-radius:50%; background:var(--jade); border:2.5px solid var(--card); cursor:grab; }
+  .ctl .val{ font-family:var(--mono); font-size:10.5px; color:var(--jade-d);
+    min-width:40px; text-align:right; }
+
+  .sw{ display:flex; align-items:center; gap:8px; cursor:pointer;
+    font-size:11.5px; color:var(--ink-2); user-select:none; }
+  .sw input{ position:absolute; opacity:0; width:0; height:0; }
+  .sw i{ width:34px; height:18px; border-radius:9px; background:var(--line-2);
+    position:relative; transition:background .15s; flex:0 0 34px; }
+  .sw i::after{ content:''; position:absolute; top:2px; left:2px;
+    width:14px; height:14px; border-radius:50%; background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.18); transition:transform .15s; }
+  .sw input:checked + i{ background:var(--jade); }
+  .sw input:checked + i::after{ transform:translateX(16px); }
+
+  @media (max-width:800px){
+    body{ padding:13px 13px 18px; }
+    .grid{ grid-template-columns:1fr; }
+    .ctrls{ gap:11px; }
+    .ctl{ width:100%; justify-content:space-between; }
+    .ctl input[type=range]{ flex:1; width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="kick">INTERACTIVE · 归一化 + 变点检测</div>
+<h1>不归一化，你找到的是钻压，不是地层</h1>
+<p class="desc">
+  曲线按井段排列（每点 0.5 m）。绿虚线是真实界面，橙实线是检出的界面。
+  <b>关掉归一化</b>，中段会多出一个台阶——它来自钻压变化，而变点检测会忠实地把它当成一层。
+  再拖「惩罚 β」：往左薄层浮出来，往右薄层被合并。
+</p>
+
+<div class="grid">
+  <div class="stage">
+    <svg id="chart" viewBox="0 0 620 226" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="钻时曲线、真实界面与检出界面"></svg>
+    <div class="legend">
+      <span><i style="background:#4d565b"></i>归一化钻时</span>
+      <span><i class="dash" style="color:#2f7d6b"></i>真实界面</span>
+      <span><i style="background:#b26a39"></i>检出界面</span>
+      <span><i class="box" style="background:#b05a51;opacity:.16"></i>假界面区</span>
+    </div>
+    <div class="cap">底部色条是检出的层段（交替深浅）。<b>层数越少，说明 β 越大</b>——代价是薄层被合并。</div>
+  </div>
+
+  <div class="side">
+    <div class="metrics" id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h5>检出界面</h5>
+      <table id="tbl"></table>
+    </div>
+    <div class="card">
+      <h5>界面口径</h5>
+      <p style="margin:0;font-size:9.6px;line-height:1.65;color:var(--ink-4)">
+        容差 <b style="color:var(--ink-2)">±5 个采样点</b>（约 ±2.5 m）。
+        <b style="color:var(--ink-2)">分层是「界面是否落在容差内」的问题，不是逐点分类</b>——
+        所以指标是召回与精确率，不是准确率。
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <div class="ctl">
+    <label>惩罚 β</label>
+    <input type="range" id="s-beta" min="1" max="60" step="1" value="10">
+    <span class="val" id="v-beta">0.50</span>
+  </div>
+  <div class="ctl">
+    <label>钻压扰动</label>
+    <input type="range" id="s-opn" min="0" max="100" step="10" value="80">
+    <span class="val" id="v-opn">80%</span>
+  </div>
+  <label class="sw">
+    <input type="checkbox" id="s-norm" checked>
+    <i></i><span>工况归一化</span>
+  </label>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     一、构造信号
+     ---------------------------------------------------------
+     200 点，每点 0.5 m（= 100 m 井段）
+     5 层：[1.02, 0.55, 0.98, 0.60, 0.86]
+     第 2 层（破碎带）噪声放大 3 倍 —— 真实的钻时就这样
+     归一化关闭时，第 112 点后整体下降（钻压提高）
+     ========================================================= */
+  var N = 200;
+  var TRUE = [0, 40, 88, 148, 176, 200];
+  var VALS = [1.02, 0.55, 0.98, 0.60, 0.86];
+  var ZONE = [40, 88];
+  var WOB_AT = 112;
+  var TOL = 5;
+  var TRUE_B = TRUE.slice(1, -1);      /* [40, 88, 148, 176] */
+
+  function lcg(a) {
+    return function () {
+      a = (a * 9301 + 49297) % 233280;
+      return a / 233280;
+    };
+  }
+
+  var RND = lcg(11);
+  var NZ = (function () {
+    var a = [], i;
+    for (i = 0; i < N; i++) a.push(RND() - 0.5);
+    return a;
+  })();
+
+  function layerOf(i) {
+    var k;
+    for (k = 0; k < TRUE.length - 1; k++) {
+      if (i >= TRUE[k] && i < TRUE[k + 1]) return k;
+    }
+    return TRUE.length - 2;
+  }
+
+  function build(st) {
+    var sig = [], i;
+    for (i = 0; i < N; i++) {
+      var amp = 0.14;
+      if (i >= ZONE[0] && i < ZONE[1]) amp *= 3.0;
+      var v = VALS[layerOf(i)] + NZ[i] * amp;
+      if (!st.norm && i >= WOB_AT) v -= st.opn / 100 * 0.32;
+      sig.push(v);
+    }
+    return sig;
+  }
+
+  /* =========================================================
+     二、最优分段（DP + 惩罚项）
+     ========================================================= */
+  function segment(sig, beta) {
+    var n = sig.length, i, k, e, st;
+
+    var s1 = [0], s2 = [0];
+    for (i = 0; i < n; i++) {
+      s1.push(s1[i] + sig[i]);
+      s2.push(s2[i] + sig[i] * sig[i]);
+    }
+    function cost(a, b) {
+      var cnt = b - a;
+      if (cnt <= 0) return 0;
+      var su = s1[b] - s1[a];
+      return s2[b] - s2[a] - su * su / cnt;
+    }
+
+    var pts = [];
+    for (i = 0; i < n; i += 4) pts.push(i);
+    if (pts[pts.length - 1] !== n) pts.push(n);
+
+    var K = pts.length;
+    var MAXS = Math.min(12, K - 1);
+    var INF = 1e18;
+
+    var dp = [], prev = [];
+    for (k = 0; k <= MAXS; k++) {
+      dp.push([]); prev.push([]);
+      for (i = 0; i < K; i++) { dp[k].push(INF); prev[k].push(-1); }
+    }
+    dp[0][0] = 0;
+
+    for (k = 1; k <= MAXS; k++) {
+      for (e = k; e < K; e++) {
+        var best = INF, bp = -1;
+        for (st = k - 1; st < e; st++) {
+          if (dp[k - 1][st] >= INF) continue;
+          var v = dp[k - 1][st] + cost(pts[st], pts[e]) + beta;
+          if (v < best) { best = v; bp = st; }
+        }
+        dp[k][e] = best;
+        prev[k][e] = bp;
+      }
+    }
+
+    var bk = 1, bv = INF;
+    for (k = 1; k <= MAXS; k++) {
+      if (dp[k][K - 1] < bv) { bv = dp[k][K - 1]; bk = k; }
+    }
+
+    var bounds = [], cur = K - 1, kk = bk;
+    while (kk > 1 && cur > 0) {
+      var p = prev[kk][cur];
+      if (p <= 0) break;
+      bounds.push(pts[p]);
+      cur = p;
+      kk--;
+    }
+    return bounds.reverse();
+  }
+
+  /* =========================================================
+     三、绘图
+     ========================================================= */
+  var SW = 620, SH = 226;
+  var LX = 46, RX = 604, TY = 26, BY = 172;
+  var STRIP_Y = 182, STRIP_H = 10;
+
+  function drawChart(sig, bounds, st) {
+    var lo = Math.min.apply(null, sig);
+    var hi = Math.max.apply(null, sig);
+    var pad = (hi - lo) * 0.16 + 0.02;
+    lo -= pad; hi += pad;
+
+    function X(i) { return LX + i / (N - 1) * (RX - LX); }
+    function Y(v) { return BY - (v - lo) / (hi - lo) * (BY - TY); }
+
+    var s = '', i;
+    s += '<rect width="' + SW + '" height="' + SH + '" fill="#ffffff"/>';
+
+    /* 假界面区高亮 */
+    if (!st.norm && st.opn > 0) {
+      s += '<rect x="' + X(WOB_AT - 5).toFixed(1) + '" y="' + TY +
+        '" width="' + (X(WOB_AT + 7) - X(WOB_AT - 5)).toFixed(1) +
+        '" height="' + (BY - TY) + '" fill="#b05a51" fill-opacity=".16"/>';
+      s += '<line x1="' + X(WOB_AT).toFixed(1) + '" y1="' + TY +
+        '" x2="' + X(WOB_AT).toFixed(1) + '" y2="' + BY +
+        '" stroke="#b05a51" stroke-width="1.2" stroke-dasharray="3 3" stroke-opacity=".8"/>';
+      s += '<text x="' + X(WOB_AT).toFixed(1) + '" y="' + (TY - 4) +
+        '" font-size="7.6" fill="#b05a51" text-anchor="middle" font-weight="600">' +
+        '假界面（钻压）</text>';
+    }
+
+    /* 网格 */
+    [0.4, 0.6, 0.8, 1.0].forEach(function (g) {
+      if (g < lo || g > hi) return;
+      s += '<line x1="' + LX + '" y1="' + Y(g).toFixed(1) + '" x2="' + RX +
+        '" y2="' + Y(g).toFixed(1) + '" stroke="#f4f1e9"/>';
+      s += '<text x="' + (LX - 6) + '" y="' + (Y(g) + 3).toFixed(1) +
+        '" font-size="7.2" fill="#9ba3a9" text-anchor="end" ' +
+        'font-family="ui-monospace,monospace">' + g.toFixed(1) + '</text>';
+    });
+
+    /* 真实界面 */
+    for (i = 0; i < TRUE_B.length; i++) {
+      var tb = TRUE_B[i];
+      s += '<line x1="' + X(tb).toFixed(1) + '" y1="' + TY +
+        '" x2="' + X(tb).toFixed(1) + '" y2="' + BY +
+        '" stroke="#2f7d6b" stroke-width="1.2" stroke-dasharray="4 4" ' +
+        'stroke-opacity=".65"/>';
+      s += '<text x="' + (X(tb) + 2).toFixed(1) + '" y="' + (TY + 10) +
+        '" font-size="7" fill="#2f7d6b">真</text>';
+    }
+
+    /* 检出界面 */
+    for (i = 0; i < bounds.length; i++) {
+      var b = bounds[i];
+      var isTrue = TRUE_B.some(function (t) { return Math.abs(t - b) <= TOL; });
+      var col = isTrue ? '#b26a39' : '#b05a51';
+      s += '<line x1="' + X(b).toFixed(1) + '" y1="' + TY +
+        '" x2="' + X(b).toFixed(1) + '" y2="' + BY +
+        '" stroke="' + col + '" stroke-width="1.7"/>';
+      s += '<text x="' + (X(b) + 2).toFixed(1) + '" y="' + (BY - 4) +
+        '" font-size="7" fill="' + col + '" font-weight="600">' +
+        (isTrue ? '测' : '误') + '</text>';
+    }
+
+    /* 曲线 */
+    var pd = '';
+    for (i = 0; i < N; i++) {
+      pd += (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(sig[i]).toFixed(1);
+    }
+    s += '<path d="' + pd + '" fill="none" stroke="#4d565b" stroke-width="1.35" ' +
+      'stroke-linejoin="round"/>';
+
+    /* 轴 */
+    s += '<line x1="' + LX + '" y1="' + BY + '" x2="' + RX + '" y2="' + BY +
+      '" stroke="#ddd7c8"/>';
+
+    /* 层段色条 */
+    var edges = [0].concat(bounds, [N]);
+    for (i = 0; i < edges.length - 1; i++) {
+      var a = edges[i], b2 = edges[i + 1];
+      s += '<rect x="' + X(a).toFixed(1) + '" y="' + STRIP_Y +
+        '" width="' + Math.max(1.5, X(b2) - X(a)).toFixed(1) +
+        '" height="' + STRIP_H + '" rx="1.5" fill="' +
+        (i % 2 ? '#2f7d6b' : '#9ba3a9') + '" fill-opacity="' +
+        (i % 2 ? '.32' : '.22') + '"/>';
+    }
+    s += '<text x="' + LX + '" y="' + (STRIP_Y + STRIP_H + 11) +
+      '" font-size="7.2" fill="#9ba3a9" font-family="ui-monospace,monospace">' +
+      '层段 · ' + (bounds.length + 1) + ' 层</text>';
+
+    /* 井深刻度 */
+    [0, 50, 100, 150, 200].forEach(function (t) {
+      s += '<text x="' + X(t).toFixed(1) + '" y="' + (SH - 6) +
+        '" font-size="7.2" fill="#9ba3a9" text-anchor="middle" ' +
+        'font-family="ui-monospace,monospace">' + (t * 0.5) + '</text>';
+    });
+    s += '<text x="' + RX + '" y="' + (SH - 6) + '" font-size="7.2" ' +
+      'fill="#9ba3a9" text-anchor="end" font-family="ui-monospace,monospace">' +
+      '进尺 m</text>';
+
+    s += '<text x="4" y="' + (TY + 4) + '" font-size="7.4" fill="#9ba3a9" ' +
+      'font-family="ui-monospace,monospace">钻时</text>';
+
+    document.getElementById('chart').innerHTML = s;
+  }
+
+  /* =========================================================
+     四、侧栏
+     ========================================================= */
+  function drawSide(sig, bounds, st, beta) {
+    var tp = 0, i;
+    var used = TRUE_B.map(function () { return false; });
+
+    for (i = 0; i < bounds.length; i++) {
+      var hit = -1;
+      TRUE_B.forEach(function (t, k) {
+        if (!used[k] && Math.abs(t - bounds[i]) <= TOL) hit = k;
+      });
+      if (hit >= 0) { used[hit] = true; tp++; }
+    }
+
+    var rec = tp / TRUE_B.length;
+    var prec = bounds.length ? tp / bounds.length : 1;
+    var layers = bounds.length + 1;
+
+    var recCls = rec >= 0.95 ? 'good' : rec >= 0.7 ? 'warn' : 'bad';
+    var precCls = prec >= 0.8 ? 'good' : prec >= 0.6 ? 'warn' : 'bad';
+
+    document.getElementById('metrics').innerHTML =
+      '<div class="metric"><div class="l">检出界面</div><div class="v">' +
+        bounds.length + '<small>个</small></div></div>' +
+      '<div class="metric ' + recCls + '"><div class="l">召回</div><div class="v">' +
+        (rec * 100).toFixed(0) + '<small>%</small></div></div>' +
+      '<div class="metric ' + precCls + '"><div class="l">精确率</div><div class="v">' +
+        (prec * 100).toFixed(0) + '<small>%</small></div></div>' +
+      '<div class="metric"><div class="l">层数</div><div class="v">' +
+        layers + '<small>层</small></div></div>';
+
+    /* 判词 */
+    var vEl = document.getElementById('verdict'), html, vc;
+
+    if (!st.norm) {
+      var falseIdx = bounds.filter(function (b) {
+        return !TRUE_B.some(function (t) { return Math.abs(t - b) <= TOL; });
+      }).length;
+
+      if (st.opn === 0) {
+        vc = 'ok';
+        html = '归一化关着，但钻压扰动也是 0——<b>两者恰好等价</b>。' +
+          '把扰动拉到 60% 以上，假界面就会出现。';
+      } else if (falseIdx > 0) {
+        vc = 'bad';
+        html = '归一化关掉了：第 ' + WOB_AT + ' 点那个台阶来自<b>钻压变化</b>，' +
+          '但变点检测把它当成了地层界面（误 ' + falseIdx + ' 个）。' +
+          '<b>这就是为什么第 2 步不能省</b>——算法没错，输入错了。';
+      } else {
+        vc = 'warn';
+        html = '归一化关着，扰动 ' + st.opn + '%，但台阶还不够大，没被判成界面。' +
+          '<b>把扰动拉到 80% 以上</b>看它什么时候跨过惩罚项。';
+      }
+    } else if (rec < 1) {
+      vc = 'warn';
+      html = '惩罚 β 偏大（' + beta.toFixed(2) + '），<b>薄层被合并了</b>：' +
+        '4 个真界面只找到 ' + tp + ' 个。<b>往左拉一点</b>——' +
+        '这就是「过分割 / 欠分割」的分界。';
+    } else if (prec < 1) {
+      vc = 'warn';
+      html = '召回满了，但多给了 ' + (bounds.length - tp) +
+        ' 个候选。<b>这在「提示模式」下是可以接受的</b>——解释员删一个错的两秒钟，' +
+        '补一个漏的要翻三张表。';
+    } else {
+      vc = 'ok';
+      html = '界面全部对齐（召回 100%，精确 100%）。真实场景里很难这么干净——' +
+        '<b>还要和岩屑、气测、GR 交叉验证才敢采信</b>。';
+    }
+
+    vEl.className = 'verdict ' + vc;
+    vEl.innerHTML = html;
+
+    /* 界面表 */
+    var rows = '';
+    for (i = 0; i < Math.min(6, bounds.length); i++) {
+      var b = bounds[i];
+      var nearest = null, nd = 1e9;
+      TRUE_B.forEach(function (t) {
+        var d = Math.abs(t - b);
+        if (d < nd) { nd = d; nearest = t; }
+      });
+      var ok = nd <= TOL;
+      rows += '<tr><td>' + (b * 0.5).toFixed(1) + ' m</td>' +
+        '<td class="' + (ok ? 'ok' : 'bad') + '">' +
+        (ok ? '±' + (nd * 0.5).toFixed(1) : '孤立') + '</td>' +
+        '<td class="' + (ok ? 'ok' : 'bad') + '">' +
+        (ok ? '命中' : '误报') + '</td></tr>';
+    }
+    if (!bounds.length) {
+      rows = '<tr><td>—</td><td>—</td><td>无检出</td></tr>';
+    }
+
+    document.getElementById('tbl').innerHTML =
+      '<thead><tr><th>深度</th><th>偏差</th><th>判定</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>';
+  }
+
+  /* =========================================================
+     五、主循环
+     ========================================================= */
+  var sBeta = document.getElementById('s-beta');
+  var sOpn = document.getElementById('s-opn');
+  var sNorm = document.getElementById('s-norm');
+  var vBeta = document.getElementById('v-beta');
+  var vOpn = document.getElementById('v-opn');
+
+  var state = { beta: 10, opn: 80, norm: true };
+
+  function paint() {
+    state.beta = Number(sBeta.value);
+    state.opn = Number(sOpn.value);
+    state.norm = sNorm.checked;
+
+    var beta = state.beta / 20;
+    vBeta.textContent = beta.toFixed(2);
+    vOpn.textContent = state.opn + '%';
+
+    var sig = build(state);
+    var bounds = segment(sig, beta);
+
+    drawChart(sig, bounds, state);
+    drawSide(sig, bounds, state, beta);
+  }
+
+  sBeta.addEventListener('input', paint);
+  sOpn.addEventListener('input', paint);
+  sNorm.addEventListener('change', paint);
+
+  paint();
+
+})();
+</script>
+
+</body>
+</html>

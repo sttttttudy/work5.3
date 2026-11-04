@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>录井报告自动生成 · 信息抽取与模板化组装</title>
+<style>
+  :root{
+    --jade:#2f8f7a; --jade-1:#eaf5f1; --jade-2:#c6e4da; --jade-3:#1f7261;
+    --clay:#b4653f; --clay-1:#fbf1ea; --clay-2:#eed6c6;
+    --ink:#1f2a30; --ink-1:#eef1f3; --ink-2:#d5dde1; --ink-3:#5b6b74; --ink-4:#9aa8b0;
+    --bg:#f4f6f6; --panel:#ffffff; --danger:#c0392b; --danger-1:#fbeae7;
+    --warn:#d4a017; --warn-1:#fdf8e7;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:15px; line-height:1.6;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ height:100%; display:flex; flex-direction:column; background:var(--bg); }
+
+  .topbar{
+    height:42px; flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--ink-2);
+  }
+  .topbar .dot{ width:10px; height:10px; border-radius:50%; background:var(--jade); box-shadow:0 0 0 3px var(--jade-1); }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar .scene{ margin-left:auto; font-size:12px; color:var(--ink-4); font-family:ui-monospace,Menlo,monospace; }
+
+  .panes{ flex:1 1 auto; min-height:0; position:relative; }
+  .pane{ height:100%; overflow:auto; padding:12px; }
+  .pane::-webkit-scrollbar{ width:8px; height:8px; }
+  .pane::-webkit-scrollbar-thumb{ background:var(--ink-2); border-radius:4px; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--ink-2); border-radius:10px;
+    display:flex; flex-direction:column; min-height:0; min-width:0; overflow:hidden;
+  }
+  .panel-title{
+    flex:0 0 auto; font-size:13px; font-weight:600; color:var(--ink-3);
+    padding:9px 14px 8px; border-bottom:1px solid var(--ink-1);
+    display:flex; align-items:center; gap:7px;
+  }
+  .panel-title::before{ content:''; width:3px; height:14px; border-radius:2px; background:var(--jade); }
+  .svg-box{ flex:1 1 auto; min-height:0; padding:5px 8px 7px; }
+  .svg-box svg{ width:100%; height:100%; display:block; }
+
+  .demo-layout{ display:flex; gap:12px; height:100%; min-height:0; }
+  .panel-ctrl{ flex:0 0 238px; width:238px; }
+  .ctrl-body{ flex:1 1 auto; min-height:0; overflow:auto; padding:10px 13px 14px; }
+
+  .scenario-list { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+  .btn-scn {
+    width:100%; height:34px; border-radius:6px; font-size:12.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid var(--ink-2);
+    background:#fff; color:var(--ink-3); text-align:left; padding:0 10px;
+    transition:all .15s ease;
+  }
+  .btn-scn:hover { background:var(--ink-1); }
+  .btn-scn.active { border-color:var(--jade); background:var(--jade-1); color:var(--jade-3); }
+
+  .btn{
+    width:100%; height:38px; border-radius:8px; font-size:13.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid transparent;
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .btn-primary{ background:var(--jade); color:#fff; box-shadow:0 2px 8px rgba(47,143,122,.24); }
+  .btn-primary:hover{ background:var(--jade-3); }
+  .btn-primary:disabled{ opacity:.62; cursor:progress; box-shadow:none; }
+
+  .hint{
+    margin-top:12px; padding:9px 11px; background:var(--jade-1);
+    border:1px solid var(--jade-2); border-radius:8px;
+    font-size:12.5px; line-height:1.65; color:var(--jade-3);
+  }
+  .hint b{ font-weight:600; }
+
+  .demo-stage{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:12px; min-height:0; }
+  .panel-main{ flex:0 0 190px; height:190px; }
+  .demo-bottom{ flex:1 1 auto; min-height:0; display:flex; gap:12px; }
+  .panel-report{ flex:1.3 1 0; min-width:0; }
+  .panel-met{ flex:1 1 0; min-width:0; }
+
+  .report-content{
+    flex:1; padding:10px 14px; overflow-y:auto; font-size:13px; line-height:1.85;
+  }
+  .report-content h3{ font-size:13.5px; margin:8px 0 3px; color:var(--jade-3); }
+  .report-content h3:first-child{ margin-top:0; }
+  .report-content p{ margin:2px 0; }
+  .hl-jade{ background:var(--jade-1); color:var(--jade-3); padding:0 3px; border-radius:2px; }
+  .hl-clay{ background:var(--clay-1); color:var(--clay); padding:0 3px; border-radius:2px; }
+  .hl-warn{ background:var(--warn-1); color:var(--warn); padding:0 3px; border-radius:2px; }
+
+  .metrics{ flex:1 1 auto; min-height:0; padding:8px 14px; display:flex; flex-direction:column; justify-content:space-around; }
+  .metric{ display:flex; align-items:center; gap:9px; padding:6px 0; border-bottom:1px dashed var(--ink-1); }
+  .metric:last-child{ border-bottom:none; }
+  .m-label{ flex:0 0 92px; font-size:12.5px; color:var(--ink-3); white-space:nowrap; }
+  .m-value{ font-size:17px; font-weight:600; font-family:ui-monospace,Menlo,monospace; white-space:nowrap; }
+  .m-value em{ font-style:normal; font-size:11.5px; font-weight:500; color:var(--ink-4); margin-left:1px; }
+  .m-value.is-ok{ color:var(--jade-3); }
+  .m-value.is-warn{ color:var(--warn); }
+  .m-value.is-bad{ color:var(--danger); }
+  .m-sub{ margin-left:auto; font-size:11.5px; color:var(--ink-4); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="wrap">
+  <header class="topbar">
+    <span class="dot"></span>
+    <h1>录井报告自动生成 · 信息抽取与模板化组装</h1>
+    <span class="scene">sceneId: s4-m5</span>
+  </header>
+
+  <div class="panes">
+    <section class="pane active" id="pane-demo">
+      <div class="demo-layout">
+        <aside class="panel panel-ctrl">
+          <div class="panel-title">选择井数据</div>
+          <div class="ctrl-body">
+            <div class="scenario-list" id="scenario-list">
+              <button class="btn-scn active" data-scn="wellA">井 A（完整）</button>
+              <button class="btn-scn" data-scn="wellB">井 B（缺显示）</button>
+              <button class="btn-scn" data-scn="wellC">井 C（异常多）</button>
+            </div>
+            <button class="btn btn-primary" id="btn-generate">生成报告</button>
+            <div class="hint" style="margin-top:14px;">
+              <b>技术组合：</b>信息抽取（NLP）+ 检索增强生成（RAG）+ 模板组装（优化算法）+ 术语约束（知识图谱）。图像识别与时序预测不参与。
+            </div>
+          </div>
+        </aside>
+
+        <div class="demo-stage">
+          <section class="panel panel-main">
+            <div class="panel-title">报告生成流水线</div>
+            <div class="svg-box"><svg id="svg-pipeline" viewBox="0 0 680 160" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg></div>
+          </section>
+
+          <div class="demo-bottom">
+            <section class="panel panel-report">
+              <div class="panel-title">报告预览（关键要素已高亮）</div>
+              <div class="report-content" id="report-preview">
+                <p style="color:#9aa8b0; text-align:center; margin-top:40px;">点击左侧“生成报告”按钮，查看自动生成的录井报告初稿</p>
+              </div>
+            </section>
+            <section class="panel panel-met">
+              <div class="panel-title">生成质量指标</div>
+              <div class="metrics">
+                <div class="metric">
+                  <div class="m-label">生成耗时</div>
+                  <div class="m-value" id="m-time">—</div>
+                  <div class="m-sub">人工约 4-8 小时</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">要素覆盖率</div>
+                  <div class="m-value" id="m-cov">—</div>
+                  <div class="m-sub">分层/显示/异常</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">术语规范率</div>
+                  <div class="m-value" id="m-term">—</div>
+                  <div class="m-sub">符合企业标准</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">人工修改量</div>
+                  <div class="m-value" id="m-edit">—</div>
+                  <div class="m-sub">编辑距离估算</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = {
+    scenario: 'wellA',
+    generated: false
+  };
+
+  var els = {}, listeners = [], timeouts = [];
+
+  function q(id) { return document.getElementById(id); }
+  function f0(n) { return isFinite(n) ? Number(n).toFixed(0) : '—'; }
+
+  /* 模拟录井数据 */
+  var WELLS = {
+    wellA: {
+      name: 'A-12',
+      layers: [
+        { top: 0, bottom: 320, lith: '泥岩' },
+        { top: 320, bottom: 580, lith: '砂岩' },
+        { top: 580, bottom: 760, lith: '泥岩' }
+      ],
+      shows: [
+        { depth: '325-335', type: '油斑', grade: '1级' },
+        { depth: '340-348', type: '荧光', grade: '2级' }
+      ],
+      anomalies: [
+        { depth: '560m', type: '井漏', desc: '密度下降，出口流量减少' }
+      ]
+    },
+    wellB: {
+      name: 'B-07',
+      layers: [
+        { top: 0, bottom: 280, lith: '泥岩' },
+        { top: 280, bottom: 620, lith: '粉砂岩' },
+        { top: 620, bottom: 800, lith: '泥岩' }
+      ],
+      shows: [],
+      anomalies: [
+        { depth: '590m', type: '气测异常', desc: '总烃升高至 12000 ppm' }
+      ]
+    },
+    wellC: {
+      name: 'C-15',
+      layers: [
+        { top: 0, bottom: 350, lith: '泥岩' },
+        { top: 350, bottom: 600, lith: '灰岩' },
+        { top: 600, bottom: 900, lith: '泥岩' }
+      ],
+      shows: [
+        { depth: '355-360', type: '油浸', grade: '3级' }
+      ],
+      anomalies: [
+        { depth: '420m', type: '卡钻', desc: '扭矩急剧上升，悬重下降' },
+        { depth: '650m', type: '井涌', desc: '出口流量增大，密度下降' }
+      ]
+    }
+  };
+
+  /* 流水线 SVG */
+  function renderPipeline() {
+    var W = 680, H = 160;
+    var p = ['<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>'];
+
+    var steps = [
+      { x: 90,  label: '数据接入', icon: '📊', desc: '分层/显示/工况' },
+      { x: 260, label: '要素抽取', icon: '🔍', desc: 'NLP 抽取要素' },
+      { x: 430, label: '检索增强', icon: '📚', desc: '历史相似段落' },
+      { x: 600, label: '模板组装', icon: '📝', desc: '按模板生成' }
+    ];
+
+    var y = 80;
+    for (var i = 0; i < steps.length - 1; i++) {
+      p.push('<line x1="' + (steps[i].x + 40) + '" y1="' + y + '" x2="' + (steps[i + 1].x - 40) + '" y2="' + y + '" stroke="#c6e4da" stroke-width="2" stroke-dasharray="6 4"/>');
+      p.push('<polygon points="' + (steps[i + 1].x - 42) + ',' + (y - 5) + ' ' + (steps[i + 1].x - 30) + ',' + y + ' ' + (steps[i + 1].x - 42) + ',' + (y + 5) + '" fill="#c6e4da"/>');
+    }
+
+    for (var i = 0; i < steps.length; i++) {
+      var s = steps[i];
+      var active = state.generated;
+      var fill = active ? '#eaf5f1' : '#f8fafb';
+      var stroke = active ? '#2f8f7a' : '#d5dde1';
+      p.push('<rect x="' + (s.x - 46) + '" y="' + (y - 38) + '" width="92" height="76" rx="8" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2"/>');
+      p.push('<text x="' + s.x + '" y="' + (y - 8) + '" text-anchor="middle" font-size="20">' + s.icon + '</text>');
+      p.push('<text x="' + s.x + '" y="' + (y + 16) + '" text-anchor="middle" font-size="12" font-weight="600" fill="' + (active ? '#1f7261' : '#5b6b74') + '">' + s.label + '</text>');
+      p.push('<text x="' + s.x + '" y="' + (y + 30) + '" text-anchor="middle" font-size="9.5" fill="#9aa8b0">' + s.desc + '</text>');
+    }
+
+    p.push('<text x="' + (W / 2) + '" y="20" text-anchor="middle" font-size="12" fill="#5b6b74">报告自动生成流水线</text>');
+    return p.join('');
+  }
+
+  /* 生成报告文本 */
+  function generateReport(wellId) {
+    var w = WELLS[wellId];
+    var html = '';
+
+    html += '<h3>一、地层分层</h3>';
+    html += '<p>本井钻遇地层自上而下为：</p>';
+    for (var i = 0; i < w.layers.length; i++) {
+      var l = w.layers[i];
+      html += '<p>· <span class="hl-jade">' + l.top + '—' + l.bottom + ' m</span>，岩性为<span class="hl-jade">' + l.lith + '</span>。</p>';
+    }
+
+    html += '<h3>二、油气水显示</h3>';
+    if (w.shows.length === 0) {
+      html += '<p>本井段未见明显油气显示。</p>';
+    } else {
+      for (var i = 0; i < w.shows.length; i++) {
+        var s = w.shows[i];
+        html += '<p>· <span class="hl-clay">' + s.depth + ' m</span>，见<span class="hl-clay">' + s.type + '</span>，含油级别 <span class="hl-clay">' + s.grade + '</span>。</p>';
+      }
+    }
+
+    html += '<h3>三、异常工况记录</h3>';
+    if (w.anomalies.length === 0) {
+      html += '<p>本井钻进过程中未发生明显异常工况。</p>';
+    } else {
+      for (var i = 0; i < w.anomalies.length; i++) {
+        var a = w.anomalies[i];
+        html += '<p>· <span class="hl-warn">' + a.depth + '</span>，发生<span class="hl-warn">' + a.type + '</span>，表现为：' + a.desc + '。</p>';
+      }
+    }
+
+    html += '<h3>四、结论与建议</h3>';
+    var target = w.layers[1] ? w.layers[1].lith : '目的层';
+    var hasShow = w.shows.length > 0;
+    html += '<p>本井在 ' + target + ' 段见' + (hasShow ? '良好油气显示' : '微弱显示') +
+      '，建议对 ' + (hasShow ? w.shows[0].depth + ' m' : '—') + ' 层段进行试油验证。</p>';
+
+    return html;
+  }
+
+  function updateMetrics() {
+    if (!state.generated) {
+      els.mTime.textContent = '—';
+      els.mCov.textContent = '—';
+      els.mTerm.textContent = '—';
+      els.mEdit.textContent = '—';
+      return;
+    }
+
+    var w = WELLS[state.scenario];
+    var totalElements = w.layers.length + w.shows.length + w.anomalies.length;
+    var cov = totalElements > 0 ? Math.min(100, Math.round(90 + Math.random() * 8)) : 0;
+    var term = Math.round(92 + Math.random() * 6);
+    var edit = Math.round(10 + Math.random() * 15);
+
+    els.mTime.textContent = '8 秒';
+    els.mCov.textContent = cov + '%';
+    els.mCov.className = 'm-value ' + (cov >= 85 ? 'is-ok' : 'is-warn');
+    els.mTerm.textContent = term + '%';
+    els.mTerm.className = 'm-value ' + (term >= 90 ? 'is-ok' : 'is-warn');
+    els.mEdit.textContent = edit + '%';
+    els.mEdit.className = 'm-value ' + (edit < 25 ? 'is-ok' : 'is-warn');
+  }
+
+  function updateUI() {
+    els.svgPipeline.innerHTML = renderPipeline();
+    if (state.generated) {
+      els.reportPreview.innerHTML = generateReport(state.scenario);
+    } else {
+      els.reportPreview.innerHTML = '<p style="color:#9aa8b0; text-align:center; margin-top:40px;">点击左侧“生成报告”按钮，查看自动生成的录井报告初稿</p>';
+    }
+    updateMetrics();
+  }
+
+  /* 交互 */
+  function onScenario(scn) {
+    state.scenario = scn;
+    state.generated = false;
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].getAttribute('data-scn') === scn);
+    }
+    updateUI();
+  }
+
+  function onGenerate() {
+    if (els.btnGenerate.disabled) return;
+    els.btnGenerate.disabled = true;
+    els.btnGenerate.textContent = '生成中…';
+    var t = setTimeout(function () {
+      state.generated = true;
+      updateUI();
+      els.btnGenerate.disabled = false;
+      els.btnGenerate.textContent = '生成报告';
+    }, 400);
+    timeouts.push(t);
+  }
+
+  function addL(el, ev, fn) { if (el) { el.addEventListener(ev, fn, false); listeners.push([el, ev, fn]); } }
+
+  function init() {
+    els.svgPipeline = q('svg-pipeline');
+    els.reportPreview = q('report-preview');
+    els.btnGenerate = q('btn-generate');
+    els.mTime = q('m-time');
+    els.mCov = q('m-cov');
+    els.mTerm = q('m-term');
+    els.mEdit = q('m-edit');
+
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) {
+      (function (btn) {
+        addL(btn, 'click', function () { onScenario(btn.getAttribute('data-scn')); });
+      })(btns[i]);
+    }
+
+    addL(els.btnGenerate, 'click', onGenerate);
+
+    state.scenario = 'wellA';
+    state.generated = false;
+    updateUI();
+  }
+
+  function destroy() {
+    var i;
+    for (i = 0; i < listeners.length; i++) {
+      try { listeners[i][0].removeEventListener(listeners[i][1], listeners[i][2], false); } catch (e) {}
+    }
+    listeners = [];
+    for (i = 0; i < timeouts.length; i++) clearTimeout(timeouts[i]);
+    timeouts = [];
+    if (els.svgPipeline) els.svgPipeline.innerHTML = '';
+    if (els.reportPreview) els.reportPreview.innerHTML = '';
+  }
+
+  /* 生命周期钩子 */
+  window.__CASE_MOUNT__ = function () {
+    console.log('[s4-m5] mount() called');
+    try {
+      init();
+      return true;
+    } catch (e) {
+      console.error('[s4-m5] mount failed:', e);
+      return false;
+    }
+  };
+
+  window.__CASE_UNMOUNT__ = function () {
+    console.log('[s4-m5] unmount() called');
+    try {
+      destroy();
+      return true;
+    } catch (e) {
+      console.error('[s4-m5] unmount failed:', e);
+      return false;
+    }
+  };
+
+  function boot() {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { window.__CASE_MOUNT__(); });
+    } else {
+      window.__CASE_MOUNT__();
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

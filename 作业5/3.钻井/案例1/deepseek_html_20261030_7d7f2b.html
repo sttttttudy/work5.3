@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>岩屑岩性自动识别 · 案例演示</title>
+<style>
+  :root{
+    --jade:#2f8f7a; --jade-1:#eaf5f1; --jade-2:#c6e4da; --jade-3:#1f7261;
+    --clay:#b4653f; --clay-1:#fbf1ea; --clay-2:#eed6c6;
+    --ink:#1f2a30; --ink-1:#eef1f3; --ink-2:#d5dde1; --ink-3:#5b6b74; --ink-4:#9aa8b0;
+    --bg:#f4f6f6; --panel:#ffffff; --danger:#c0392b; --danger-1:#fbeae7;
+    --warn:#d4a017; --warn-1:#fdf8e7;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:15px; line-height:1.6;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ height:100%; display:flex; flex-direction:column; background:var(--bg); }
+
+  .topbar{
+    height:42px; flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--ink-2);
+  }
+  .topbar .dot{ width:10px; height:10px; border-radius:50%; background:var(--jade); box-shadow:0 0 0 3px var(--jade-1); }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar .scene{ margin-left:auto; font-size:12px; color:var(--ink-4); font-family:ui-monospace,Menlo,monospace; }
+
+  .panes{ flex:1 1 auto; min-height:0; position:relative; }
+  .pane{ height:100%; overflow:auto; padding:12px; }
+  .pane::-webkit-scrollbar{ width:8px; height:8px; }
+  .pane::-webkit-scrollbar-thumb{ background:var(--ink-2); border-radius:4px; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--ink-2); border-radius:10px;
+    display:flex; flex-direction:column; min-height:0; min-width:0; overflow:hidden;
+  }
+  .panel-title{
+    flex:0 0 auto; font-size:13px; font-weight:600; color:var(--ink-3);
+    padding:9px 14px 8px; border-bottom:1px solid var(--ink-1);
+    display:flex; align-items:center; gap:7px;
+  }
+  .panel-title::before{ content:''; width:3px; height:14px; border-radius:2px; background:var(--jade); }
+  .svg-box{ flex:1 1 auto; min-height:0; padding:5px 8px 7px; }
+  .svg-box svg{ width:100%; height:100%; display:block; }
+
+  /* 案例演示布局 */
+  .demo-layout{ display:flex; gap:12px; height:100%; min-height:0; }
+  .panel-ctrl{ flex:0 0 246px; width:246px; }
+  .ctrl-body{ flex:1 1 auto; min-height:0; overflow:auto; padding:10px 13px 14px; }
+
+  .field{ margin-bottom:16px; }
+  .field-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:5px; }
+  .field-head span{ font-size:13px; color:var(--ink-3); }
+  .field-head b{ font-size:13.5px; font-weight:600; color:var(--jade-3); font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,monospace; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:3px;
+    background:linear-gradient(90deg,var(--jade-2),var(--ink-1)); outline:none; cursor:pointer; margin:5px 0 0;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:17px; height:17px; border-radius:50%;
+    background:var(--jade); border:2.5px solid #fff; box-shadow:0 1px 4px rgba(31,42,48,.28); cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid #fff; box-shadow:0 1px 4px rgba(31,42,48,.28); cursor:pointer;
+  }
+
+  .btn{
+    width:100%; height:38px; border-radius:8px; font-size:13.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid transparent;
+    transition:background .15s ease, border-color .15s ease, transform .1s ease, box-shadow .15s ease;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn-primary{ background:var(--jade); color:#fff; box-shadow:0 2px 8px rgba(47,143,122,.24); }
+  .btn-primary:hover{ background:var(--jade-3); }
+  .btn-primary:disabled{ opacity:.62; cursor:progress; box-shadow:none; }
+
+  .hint{
+    margin-top:12px; padding:9px 11px; background:var(--jade-1);
+    border:1px solid var(--jade-2); border-radius:8px;
+    font-size:12.5px; line-height:1.65; color:var(--jade-3);
+  }
+  .hint b{ font-weight:600; }
+
+  .demo-stage{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:12px; min-height:0; }
+  .panel-main{ flex:1 1 auto; min-height:0; }
+  .demo-bottom{ flex:0 0 206px; height:206px; display:flex; gap:12px; }
+  .panel-bar{ flex:1.06 1 0; min-width:0; }
+  .panel-met{ flex:1 1 0; min-width:0; }
+
+  .metrics{ flex:1 1 auto; min-height:0; padding:4px 13px 8px; display:flex; flex-direction:column; justify-content:space-around; }
+  .metric{ display:flex; align-items:center; gap:9px; padding:4px 0; border-bottom:1px dashed var(--ink-1); }
+  .metric:last-child{ border-bottom:none; }
+  .m-label{ flex:0 0 88px; font-size:12.5px; color:var(--ink-3); white-space:nowrap; }
+  .m-value{
+    font-size:17px; font-weight:600; color:var(--ink);
+    font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,monospace;
+    white-space:nowrap;
+  }
+  .m-value em{ font-style:normal; font-size:11.5px; font-weight:500; color:var(--ink-4); margin-left:1px; }
+  .m-value.is-ok{ color:var(--jade-3); }
+  .m-value.is-warn{ color:var(--warn); }
+  .m-value.is-bad{ color:var(--danger); }
+  .m-sub{ margin-left:auto; font-size:11.5px; color:var(--ink-4); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .badge{ display:inline-flex; align-items:center; gap:5px; padding:2px 11px; border-radius:20px; font-size:13.5px; font-weight:600; }
+  .badge::before{ content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .badge.ok{ color:var(--jade-3); background:var(--jade-1); }
+  .badge.warn{ color:var(--warn); background:var(--warn-1); }
+  .badge.bad{ color:var(--danger); background:var(--danger-1); }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="wrap">
+  <header class="topbar">
+    <span class="dot"></span>
+    <h1>岩屑岩性自动识别 · 细粒度分类与多标签组分</h1>
+    <span class="scene">sceneId: s4-m1</span>
+  </header>
+
+  <div class="panes">
+    <section class="pane active" id="pane-demo">
+      <div class="demo-layout">
+        <aside class="panel panel-ctrl">
+          <div class="panel-title">深度控制</div>
+          <div class="ctrl-body">
+            <div class="field">
+              <div class="field-head"><span>模拟井深 (m)</span><b id="v-depth">1500 m</b></div>
+              <input type="range" id="s-depth" min="1000" max="3000" step="10" value="1500" />
+            </div>
+
+            <div class="actions" style="margin-top:16px;">
+              <button class="btn btn-primary" id="btn-run" type="button">AI 智能识别</button>
+            </div>
+
+            <div class="hint" style="margin-top:16px;">
+              <b>技术要点：</b>细粒度图像分类（视觉）+ 多标签组分约束优化 + 随深度序列平滑（时序）+ 地质知识图谱约束 + 自动生成岩屑描述文本（NLP）。
+            </div>
+          </div>
+        </aside>
+
+        <div class="demo-stage">
+          <section class="panel panel-main">
+            <div class="panel-title">岩屑显微图像分析</div>
+            <div class="svg-box"><svg id="svg-micro" viewBox="0 0 680 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg></div>
+          </section>
+          <div class="demo-bottom">
+            <section class="panel panel-bar">
+              <div class="panel-title">多标签组分比例 (%)</div>
+              <div class="svg-box"><svg id="svg-bar" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg></div>
+            </section>
+            <section class="panel panel-met">
+              <div class="panel-title">识别指标面板</div>
+              <div class="metrics">
+                <div class="metric">
+                  <div class="m-label">主导岩性</div>
+                  <div class="m-value" id="m-lith" style="font-size:16px; color:var(--jade-3);">—</div>
+                  <div class="m-sub" id="m-lith-sub">AI 识别结果</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">识别置信度</div>
+                  <div class="m-value" id="m-conf">0<em>%</em></div>
+                  <div class="m-sub" id="m-conf-sub">> 85% 安全</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">含油级别</div>
+                  <div class="m-value" id="m-oil" style="font-size:15px; color:var(--clay);">—</div>
+                  <div class="m-sub" id="m-oil-sub">基于荧光特征</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">细粒度预警</div>
+                  <div class="m-value" id="m-flag"><span class="badge ok">正常</span></div>
+                  <div class="m-sub" id="m-flag-sub">无混淆风险</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DEFAULTS = { depth: 1500 };
+  var state = { depth: DEFAULTS.depth, analyzing: false, result: null };
+
+  var els = {}, listeners = [], timeouts = [], mounted = false;
+
+  function q(id) { return document.getElementById(id); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function f1(n) { return isFinite(n) ? Number(n).toFixed(1) : '—'; }
+  function f0(n) { return isFinite(n) ? Number(n).toFixed(0) : '—'; }
+
+  /* 生成模拟数据（序列模型平滑后的岩性组合） */
+  function generateLithology(depth) {
+    var trueLith = '泥岩';
+    var visc = 0, silt = 0, fine = 0;
+    var conf = 90 + Math.random() * 8;
+    var oil = '无显示';
+    var flag = false;
+
+    if (depth < 1200) {
+      trueLith = '细砂岩'; fine = 80; silt = 15; visc = 5;
+      oil = '油斑';
+    } else if (depth < 1600) {
+      trueLith = '泥岩'; visc = 70; silt = 20; fine = 10;
+      oil = '无显示';
+      conf = 88;
+    } else if (depth < 1900) {
+      trueLith = '泥岩/页岩'; visc = 85; silt = 5; fine = 10;
+      oil = '油迹';
+      conf = 62;
+      flag = true;
+    } else if (depth < 2400) {
+      trueLith = '粉砂岩'; silt = 65; visc = 25; fine = 10;
+      oil = '油浸';
+      conf = 85;
+    } else {
+      trueLith = '灰岩'; visc = 10; silt = 10; fine = 10;
+      oil = '气测异常';
+      conf = 92;
+    }
+
+    return {
+      lith: trueLith,
+      visc: visc, silt: silt, fine: fine,
+      lime: (trueLith === '灰岩') ? 80 : (100 - visc - silt - fine),
+      conf: conf, oil: oil, flag: flag
+    };
+  }
+
+  /* 主图：模拟显微图像 */
+  function renderMicro() {
+    var W = 680, H = 300;
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fbfaf5"/>');
+
+    p.push('<line x1="30" y1="270" x2="130" y2="270" stroke="#1f2a30" stroke-width="2"/>');
+    p.push('<line x1="30" y1="265" x2="30" y2="275" stroke="#1f2a30" stroke-width="2"/>');
+    p.push('<line x1="130" y1="265" x2="130" y2="275" stroke="#1f2a30" stroke-width="2"/>');
+    p.push('<text x="80" y="285" text-anchor="middle" font-size="10" fill="#5b6b74">1 mm</text>');
+
+    p.push('<rect x="20" y="20" width="640" height="240" fill="none" stroke="#d5dde1" stroke-width="2" rx="8"/>');
+
+    if (!state.result) {
+      p.push('<text x="340" y="140" text-anchor="middle" font-size="14" fill="#9aa8b0">点击左侧「AI 智能识别」生成分析结果</text>');
+      return p.join('');
+    }
+
+    var res = state.result;
+    var i;
+
+    var nVisc = Math.round(res.visc * 2);
+    for (i = 0; i < nVisc; i++) {
+      p.push('<circle cx="' + (40 + Math.random() * 600) + '" cy="' + (40 + Math.random() * 200) + '" r="' + (1 + Math.random() * 1.5) + '" fill="#e5d3b3" opacity="0.8"/>');
+    }
+
+    var nSilt = Math.round(res.silt * 1.5);
+    for (i = 0; i < nSilt; i++) {
+      p.push('<circle cx="' + (40 + Math.random() * 600) + '" cy="' + (40 + Math.random() * 200) + '" r="' + (3 + Math.random() * 2) + '" fill="#c4a88a" opacity="0.9"/>');
+    }
+
+    var nFine = Math.round(res.fine * 1.2);
+    for (i = 0; i < nFine; i++) {
+      p.push('<circle cx="' + (40 + Math.random() * 600) + '" cy="' + (40 + Math.random() * 200) + '" r="' + (5 + Math.random() * 3) + '" fill="#a68a6d" opacity="0.9"/>');
+    }
+
+    var nLime = Math.round(res.lime * 1);
+    for (i = 0; i < nLime; i++) {
+      var cx = 40 + Math.random() * 600;
+      var cy = 40 + Math.random() * 200;
+      var sz = 4 + Math.random() * 4;
+      p.push('<polygon points="' + cx + ',' + (cy-sz) + ' ' + (cx+sz) + ',' + cy + ' ' + cx + ',' + (cy+sz) + ' ' + (cx-sz) + ',' + cy + '" fill="#d5dde1" opacity="0.9"/>');
+    }
+
+    if (res.oil !== '无显示') {
+      var nOil = res.oil === '油浸' ? 12 : (res.oil === '油斑' ? 6 : 2);
+      for (i = 0; i < nOil; i++) {
+        p.push('<circle cx="' + (40 + Math.random() * 600) + '" cy="' + (40 + Math.random() * 200) + '" r="' + (6 + Math.random() * 8) + '" fill="#3b3b3b" opacity="0.5"/>');
+      }
+    }
+
+    if (res.flag) {
+      for (i = 0; i < 5; i++) {
+        var y = 50 + Math.random() * 180;
+        p.push('<path d="M40,' + y + ' L200,' + y + ' M300,' + y + ' L500,' + y + '" stroke="#b4653f" stroke-width="1" opacity="0.3"/>');
+      }
+    }
+
+    return p.join('');
+  }
+
+  /* 底部左：组分比例堆叠条 */
+  function renderBar() {
+    var W = 300, H = 150;
+    var ML = 30, MR = 15, MT = 20, MB = 30;
+    var pw = W - ML - MR;
+
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>');
+
+    if (!state.result) return p.join('');
+
+    var res = state.result;
+    var items = [
+      { label: '泥岩', key: 'visc', color: '#e5d3b3', val: res.visc },
+      { label: '粉砂岩', key: 'silt', color: '#c4a88a', val: res.silt },
+      { label: '细砂岩', key: 'fine', color: '#a68a6d', val: res.fine },
+      { label: '灰岩', key: 'lime', color: '#d5dde1', val: res.lime }
+    ].filter(function(it) { return it.val > 0; });
+
+    var barH = 24;
+    var y = MT;
+    var currentX = ML;
+
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var w = (it.val / 100) * pw;
+      p.push('<rect x="' + f1(currentX) + '" y="' + y + '" width="' + f1(w) + '" height="' + barH + '" fill="' + it.color + '" stroke="#fff" stroke-width="1"/>');
+      currentX += w;
+    }
+
+    var legY = y + barH + 20;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var row = Math.floor(i / 2);
+      var col = i % 2;
+      var lx = ML + col * 130;
+      var ly = legY + row * 22;
+
+      p.push('<rect x="' + lx + '" y="' + (ly - 8) + '" width="12" height="12" fill="' + it.color + '" rx="2"/>');
+      p.push('<text x="' + (lx + 18) + '" y="' + (ly + 2) + '" font-size="11" fill="#5b6b74">' + it.label + ' ' + f0(it.val) + '%</text>');
+    }
+
+    return p.join('');
+  }
+
+  function renderMetrics() {
+    if (!state.result) {
+      if (els.mLith) els.mLith.textContent = '—';
+      if (els.mConf) els.mConf.innerHTML = '0<em>%</em>';
+      if (els.mOil) els.mOil.textContent = '—';
+      if (els.mFlag) els.mFlag.innerHTML = '<span class="badge ok">正常</span>';
+      return;
+    }
+
+    var res = state.result;
+
+    if (els.mLith) {
+      els.mLith.textContent = res.lith;
+    }
+
+    if (els.mConf) {
+      els.mConf.innerHTML = f0(res.conf) + '<em>%</em>';
+      els.mConf.className = 'm-value ' + (res.conf >= 85 ? 'is-ok' : 'is-warn');
+    }
+
+    if (els.mOil) {
+      els.mOil.textContent = res.oil;
+      els.mOil.className = 'm-value ' + (res.oil === '无显示' ? '' : 'is-warn');
+    }
+
+    if (els.mFlag) {
+      if (res.flag) {
+        els.mFlag.innerHTML = '<span class="badge bad">细粒度混淆</span>';
+        els.mFlagSub.textContent = '泥岩/页岩易混淆';
+      } else {
+        els.mFlag.innerHTML = '<span class="badge ok">正常</span>';
+        els.mFlagSub.textContent = '无混淆风险';
+      }
+    }
+  }
+
+  function renderDemo() {
+    if (!state.analyzing && !state.result) {
+      state.result = generateLithology(state.depth);
+    }
+
+    if (els.svgMicro) els.svgMicro.innerHTML = renderMicro();
+    if (els.svgBar) els.svgBar.innerHTML = renderBar();
+    renderMetrics();
+  }
+
+  function syncLabels() {
+    if (els.vDepth) els.vDepth.textContent = state.depth + ' m';
+  }
+
+  function onDepthChange() {
+    state.depth = parseFloat(els.sDepth.value);
+    syncLabels();
+    if (state.result) {
+      state.result = generateLithology(state.depth);
+      renderDemo();
+    } else {
+      if (els.svgMicro) els.svgMicro.innerHTML = renderMicro();
+    }
+  }
+
+  function onRun() {
+    if (state.analyzing) return;
+    state.analyzing = true;
+    if (els.btnRun) { els.btnRun.disabled = true; els.btnRun.textContent = '分析中…'; }
+
+    var t = window.setTimeout(function () {
+      timeouts = timeouts.filter(function (id) { return id !== t; });
+      state.analyzing = false;
+      if (els.btnRun) { els.btnRun.disabled = false; els.btnRun.textContent = 'AI 智能识别'; }
+
+      var res = generateLithology(state.depth);
+      var noise = (Math.random() - 0.5) * 2;
+      res.visc = clamp(res.visc + noise, 0, 100);
+      res.conf = clamp(res.conf + (Math.random() - 0.5) * 4, 0, 100);
+      state.result = res;
+
+      renderDemo();
+    }, 500);
+    timeouts.push(t);
+  }
+
+  function addL(el, ev, fn) { if (el) { el.addEventListener(ev, fn, false); listeners.push([el, ev, fn]); } }
+
+  function init() {
+    els.svgMicro = q('svg-micro'); els.svgBar = q('svg-bar');
+    els.sDepth = q('s-depth');
+    els.vDepth = q('v-depth');
+    els.btnRun = q('btn-run');
+    els.mLith = q('m-lith'); els.mLithSub = q('m-lith-sub');
+    els.mConf = q('m-conf'); els.mConfSub = q('m-conf-sub');
+    els.mOil = q('m-oil'); els.mOilSub = q('m-oil-sub');
+    els.mFlag = q('m-flag'); els.mFlagSub = q('m-flag-sub');
+
+    addL(els.sDepth, 'input', onDepthChange);
+    addL(els.btnRun, 'click', onRun);
+
+    syncLabels();
+    renderDemo();
+  }
+
+  function destroy() {
+    var i;
+    for (i = 0; i < listeners.length; i++) { try { listeners[i][0].removeEventListener(listeners[i][1], listeners[i][2], false); } catch (e) {} }
+    listeners = [];
+    for (i = 0; i < timeouts.length; i++) window.clearTimeout(timeouts[i]);
+    timeouts = [];
+    if (els.svgMicro) els.svgMicro.innerHTML = '';
+    if (els.svgBar) els.svgBar.innerHTML = '';
+    els = {}; state.analyzing = false;
+  }
+
+  window.__CASE_MOUNT__ = function () {
+    if (mounted) return;
+    mounted = true;
+    try { init(); } catch (e) { mounted = false; if (window.console && console.error) console.error('[s4-m1] mount failed:', e); }
+  };
+  window.__CASE_UNMOUNT__ = function () {
+    if (!mounted) return;
+    mounted = false;
+    try { destroy(); } catch (e) { if (window.console && console.error) console.error('[s4-m1] unmount failed:', e); }
+  };
+
+  function boot() { if (!mounted) window.__CASE_MOUNT__(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, false);
+  else boot();
+  window.addEventListener('pagehide', function () { window.__CASE_UNMOUNT__(); }, false);
+
+})();
+</script>
+</body>
+</html>

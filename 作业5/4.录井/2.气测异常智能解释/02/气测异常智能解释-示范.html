@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>气测异常智能解释 · 示范</title>
+<style>
+  :root{
+    --jade:#2f7d6b; --jade-d:#235f51; --jade-l:#e6f1ec;
+    --clay:#b26a39; --clay-l:#f8ecdf;
+    --opt:#41699b; --opt-l:#e7eef9;
+    --plum:#7e5a8d;
+    --ink:#242b2e; --ink-2:#4d565b; --ink-3:#79828a; --ink-4:#9ba3a9;
+    --line:#e9e4d8; --line-2:#ddd7c8; --line-3:#c9c2b0;
+    --card:#ffffff; --soft:#fdfcf9; --paper:#fbfaf6;
+    --ok:#3f8560; --warn:#a97a1c; --bad:#b05a51;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:16px 18px 22px; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .kick{ font-family:var(--mono); font-size:9px; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--jade-d); }
+  h1{ font-size:17px; font-weight:650; margin:7px 0 0; letter-spacing:-.01em; }
+  .desc{ margin:7px 0 0; font-size:12px; color:var(--ink-3);
+    line-height:1.7; max-width:82ch; }
+  .desc b{ color:var(--ink-2); }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) 244px;
+    gap:12px; margin-top:14px; align-items:start; }
+  .stage{ background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:9px 10px 8px; min-width:0; }
+  .stage svg{ display:block; width:100%; height:auto; }
+  .legend{ display:flex; flex-wrap:wrap; gap:11px; margin-top:8px;
+    font-size:9.8px; color:var(--ink-4); }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend i{ width:13px; height:2.5px; border-radius:1px; display:block; }
+  .legend i.dash{ height:0; border-top:1px dashed currentColor; background:none !important; }
+  .legend i.box{ height:10px; border-radius:2px; }
+  .cap{ font-size:10px; color:var(--ink-4); margin-top:6px; line-height:1.6; }
+
+  .side{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .metric{ background:var(--card); padding:8px 9px; }
+  .metric .l{ font-family:var(--mono); font-size:7.4px; letter-spacing:.07em;
+    color:var(--ink-4); white-space:nowrap; }
+  .metric .v{ font-family:var(--mono); font-size:15px; margin-top:4px;
+    line-height:1; color:var(--ink); }
+  .metric .v small{ font-size:8px; color:var(--ink-4); margin-left:2px; }
+  .metric.good .v{ color:var(--ok); }
+  .metric.warn .v{ color:var(--warn); }
+  .metric.bad .v{ color:var(--bad); }
+
+  .verdict{ font-size:11.2px; line-height:1.7; color:var(--ink-2);
+    border-left:2.5px solid var(--line-2); padding-left:9px; }
+  .verdict b{ color:var(--ink); }
+  .verdict.ok{ border-color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); }
+
+  .card{ border:1px solid var(--line); border-radius:8px;
+    background:var(--soft); padding:9px 10px; }
+  .card h5{ margin:0 0 6px; font-family:var(--mono); font-size:7.6px;
+    letter-spacing:.1em; color:var(--ink-4); font-weight:400; text-transform:uppercase; }
+  table{ width:100%; border-collapse:collapse; font-size:9.6px; }
+  th{ font-family:var(--mono); font-size:7.2px; letter-spacing:.06em;
+    color:var(--ink-4); font-weight:400; text-align:right; padding:3px 0 4px;
+    border-bottom:1px solid var(--line-2); }
+  td{ padding:3px 0; border-bottom:1px solid var(--line); color:var(--ink-3);
+    text-align:right; font-family:var(--mono); white-space:nowrap; }
+  th:first-child,td:first-child{ text-align:left; font-family:inherit; }
+  tr:last-child td{ border-bottom:0; }
+  td.ok{ color:var(--ok); } td.warn{ color:var(--warn); } td.bad{ color:var(--bad); }
+
+  .ctrls{ display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+    margin-top:11px; padding:11px 14px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; }
+  .ctl{ display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--ink-2); }
+  .ctl label{ font-family:var(--mono); font-size:9px; letter-spacing:.06em;
+    color:var(--ink-3); white-space:nowrap; }
+  .ctl input[type=range]{ -webkit-appearance:none; appearance:none;
+    width:126px; height:4px; border-radius:2px; background:var(--line-2);
+    outline:none; cursor:pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid var(--card); box-shadow:0 0 0 1px var(--jade); cursor:grab; }
+  .ctl input[type=range]::-moz-range-thumb{ width:13px; height:13px;
+    border-radius:50%; background:var(--jade); border:2.5px solid var(--card); cursor:grab; }
+  .ctl .val{ font-family:var(--mono); font-size:10.5px; color:var(--jade-d);
+    min-width:44px; text-align:right; }
+
+  @media (max-width:800px){
+    body{ padding:13px 13px 18px; }
+    .grid{ grid-template-columns:1fr; }
+    .ctrls{ gap:11px; }
+    .ctl{ width:100%; justify-content:space-between; }
+    .ctl input[type=range]{ flex:1; width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="kick">INTERACTIVE · 分段 + 判别</div>
+<h1>四种峰，一个阈值捉不住</h1>
+<p class="desc">
+  全烃曲线上的四个隆起分别来自：<b>油气层</b>、<b>接单根气</b>、<b>后效气</b>、<b>薄层</b>。
+  红色虚线是现场常用的固定阈值（背景 + 9）。绿色方框是我们做的分段判据：
+  峰顶落在停泵窗里的剔除、半高宽超过 20 点的剔除、其余保留——<b>薄层靠局部对比被发现，不靠绝对高度</b>。
+</p>
+
+<div class="grid">
+  <div class="stage">
+    <svg id="chart" viewBox="0 0 620 252" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="全烃曲线上的四种峰与两类判据"></svg>
+    <div class="legend">
+      <span><i style="background:#4d565b"></i>全烃曲线</span>
+      <span><i class="dash" style="color:#2f7d6b"></i>局部基线</span>
+      <span><i class="dash" style="color:#b05a51"></i>固定阈值</span>
+      <span><i class="box" style="background:#2f7d6b;opacity:.3"></i>判为显示段</span>
+      <span><i class="box" style="background:#9ba3a9;opacity:.35"></i>剔除段</span>
+      <span><i class="box" style="background:#b26a39;opacity:.16"></i>停泵窗</span>
+    </div>
+    <div class="cap">顶部灰色竖虚线是真实位置（供核对）。曲线噪声固定，拖滑杆时形态连续可读。</div>
+  </div>
+
+  <div class="side">
+    <div class="metrics" id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h5>分段结果</h5>
+      <table id="tbl"></table>
+    </div>
+    <div class="card">
+      <h5>两条剔除规则</h5>
+      <p style="margin:0;font-size:9.6px;line-height:1.65;color:var(--ink-4)">
+        <b style="color:var(--ink-2)">① 峰顶落在停泵窗</b> → 接单根气。它窄而尖，
+        幅度甚至高于真显示，靠宽度救不了。<br>
+        <b style="color:var(--ink-2)">② 半高宽 &gt; 20 点</b> → 后效气。
+        循环恢复后气体缓慢释出，峰宽而缓。<br>
+        这两条都是领域知识，不是模型学出来的。
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <div class="ctl">
+    <label>干扰强度</label>
+    <input type="range" id="s-interf" min="0" max="120" step="10" value="60">
+    <span class="val" id="v-interf">60%</span>
+  </div>
+  <div class="ctl">
+    <label>薄层幅度</label>
+    <input type="range" id="s-thin" min="5" max="60" step="5" value="22">
+    <span class="val" id="v-thin">22</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     一、构造信号
+     ---------------------------------------------------------
+     背景 3%，噪声 σ≈0.55
+     油气层  amp 46  w 7
+     接单根  amp 20×(干扰/60)  w 4，峰顶落在停泵窗
+     后效气  amp 34×(干扰/60)  w 17（宽缓）
+     薄层    amp 薄层幅度×0.35  w 2.5
+     ========================================================= */
+  var N = 210;
+  var YMAXCAP = 62;
+
+  var POS = { oil: 46, conn: 92, after: 134, thin: 168 };
+  var WID = { oil: 7, conn: 4, after: 17, thin: 2.5 };
+  var PUMP_OFF = [85, 99];
+  var TRUTH = [
+    { at: POS.oil,   n: '油气层',   real: 1 },
+    { at: POS.conn,  n: '接单根气', real: 0 },
+    { at: POS.after, n: '后效气',   real: 0 },
+    { at: POS.thin,  n: '薄层',     real: 1 }
+  ];
+
+  function seedFn(a) {
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function gauss(rnd) {
+    var u = 0, v = 0;
+    while (u === 0) u = rnd();
+    while (v === 0) v = rnd();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  var NZ = (function () {
+    var rnd = seedFn(37), a = [], i;
+    for (i = 0; i < N; i++) a.push(gauss(rnd));
+    return a;
+  })();
+
+  function bump(i, at, w) { return Math.exp(-Math.pow((i - at) / w, 2)); }
+
+  function build(st) {
+    var k = st.interf / 60;
+    var out = [], i;
+    for (i = 0; i < N; i++) {
+      var v = 3 + NZ[i] * 0.55;
+      v += 46 * bump(i, POS.oil, WID.oil);
+      v += 20 * k * bump(i, POS.conn, WID.conn);
+      v += 34 * k * bump(i, POS.after, WID.after);
+      v += st.thin * 0.35 * bump(i, POS.thin, WID.thin);
+      out.push(Math.max(0.4, v));
+    }
+    return out;
+  }
+
+  /* =========================================================
+     二、分析
+     ========================================================= */
+  function median(a) {
+    var b = a.slice().sort(function (x, y) { return x - y; });
+    var m = b.length >> 1;
+    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
+  }
+
+  /* 固定阈值：前 30 点背景 + 9 */
+  function fixedRuns(sig) {
+    var s = 0, i;
+    for (i = 0; i < 30; i++) s += sig[i];
+    var base = s / 30;
+    var TH = base + 9;
+
+    var runs = [], inRun = false, s0 = 0;
+    for (i = 0; i < N; i++) {
+      if (sig[i] > TH) {
+        if (!inRun) { inRun = true; s0 = i; }
+      } else if (inRun) {
+        inRun = false;
+        if (i - s0 >= 2) runs.push([s0, i - 1]);
+      }
+    }
+    if (inRun) runs.push([s0, N - 1]);
+    return { TH: TH, runs: runs, base: base };
+  }
+
+  /* 局部基线 + 残差分段 + 两条剔除规则 */
+  function aiSegments(sig) {
+    var HW = 20, i;
+    var base = [], sd = [], res = [];
+
+    for (i = 0; i < N; i++) {
+      var a = Math.max(0, i - HW), b = Math.min(N - 1, i + HW);
+      var seg = sig.slice(a, b + 1);
+      var md = median(seg);
+      var dev = seg.map(function (v) { return Math.abs(v - md); });
+      base.push(md);
+      sd.push(Math.max(0.35, median(dev) * 1.4826));
+      res.push(sig[i] - md);
+    }
+
+    /* 分组 */
+    var segs = [], inSeg = false, s0 = 0;
+    for (i = 0; i < N; i++) {
+      var thr = Math.max(2.0, 3.5 * sd[i]);
+      var hit = res[i] > thr;
+      if (hit && !inSeg) { inSeg = true; s0 = i; }
+      else if (!hit && inSeg) {
+        inSeg = false;
+        if (i - s0 >= 2) segs.push([s0, i - 1]);
+      }
+    }
+    if (inSeg && N - s0 >= 2) segs.push([s0, N - 1]);
+
+    /* 每段：峰顶、半高宽、判定 */
+    var out = [];
+    for (i = 0; i < segs.length; i++) {
+      var A = segs[i][0], B = segs[i][1], k, apex = A, rmax = -1;
+      for (k = A; k <= B; k++) {
+        if (res[k] > rmax) { rmax = res[k]; apex = k; }
+      }
+
+      var half = rmax / 2, L = apex, R = apex;
+      while (L > 0 && res[L] > half) L--;
+      while (R < N - 1 && res[R] > half) R++;
+      var width = R - L;
+
+      var inPump = apex >= PUMP_OFF[0] && apex <= PUMP_OFF[1];
+      var kind, kept, reason;
+
+      if (inPump) { kind = '接单根'; kept = 0; reason = '峰顶在停泵窗'; }
+      else if (width > 20) { kind = '后效'; kept = 0; reason = '半高宽 ' + width + ' 点'; }
+      else { kind = '显示'; kept = 1; reason = '保留'; }
+
+      out.push({
+        a: A, b: B, apex: apex, rmax: rmax, width: width,
+        kept: kept, kind: kind, reason: reason
+      });
+    }
+    return { base: base, res: res, segs: out };
+  }
+
+  /* =========================================================
+     三、绘图
+     ========================================================= */
+  var SW = 620, SH = 252;
+  var LX = 46, RX = 604, TY = 26, BY = 196;
+
+  function X(i) { return LX + i / (N - 1) * (RX - LX); }
+
+  function drawChart(sig, fix, ai) {
+    var vmax = Math.max(YMAXCAP, Math.max.apply(null, sig) * 1.06);
+    function Y(v) { return BY - Math.min(1.02, v / vmax) * (BY - TY); }
+
+    var s = '', i;
+    s += '<rect width="' + SW + '" height="' + SH + '" fill="#ffffff"/>';
+
+    /* 停泵窗 */
+    s += '<rect x="' + X(PUMP_OFF[0]).toFixed(1) + '" y="' + TY +
+      '" width="' + (X(PUMP_OFF[1]) - X(PUMP_OFF[0])).toFixed(1) +
+      '" height="' + (BY - TY) + '" fill="#b26a39" fill-opacity=".14"/>';
+    s += '<text x="' + ((X(PUMP_OFF[0]) + X(PUMP_OFF[1])) / 2).toFixed(1) +
+      '" y="' + (BY + 14) + '" font-size="7.2" fill="#b26a39" ' +
+      'text-anchor="middle">停泵窗</text>';
+
+    /* 真值标记 */
+    for (i = 0; i < TRUTH.length; i++) {
+      var t = TRUTH[i];
+      s += '<line x1="' + X(t.at).toFixed(1) + '" y1="8" x2="' + X(t.at).toFixed(1) +
+        '" y2="' + TY + '" stroke="#9ba3a9" stroke-width="1" ' +
+        'stroke-dasharray="2 3" stroke-opacity=".8"/>';
+      s += '<text x="' + X(t.at).toFixed(1) + '" y="7" font-size="7.2" fill="#9ba3a9" ' +
+        'text-anchor="middle">' + t.n + '</text>';
+    }
+
+    /* AI 段底纹 */
+    for (i = 0; i < ai.segs.length; i++) {
+      var g = ai.segs[i];
+      s += '<rect x="' + X(g.a).toFixed(1) + '" y="' + TY +
+        '" width="' + Math.max(3, X(g.b) - X(g.a)).toFixed(1) +
+        '" height="' + (BY - TY) + '" rx="2" fill="' +
+        (g.kept ? '#2f7d6b' : '#9ba3a9') + '" fill-opacity="' +
+        (g.kept ? '.10' : '.13') + '"/>';
+    }
+
+    /* 固定阈值线 */
+    s += '<line x1="' + LX + '" y1="' + Y(fix.TH).toFixed(1) + '" x2="' + RX +
+      '" y2="' + Y(fix.TH).toFixed(1) + '" stroke="#b05a51" stroke-width="1.2" ' +
+      'stroke-dasharray="5 3" stroke-opacity=".8"/>';
+    s += '<text x="' + RX + '" y="' + (Y(fix.TH) - 4).toFixed(1) + '" font-size="7.4" ' +
+      'fill="#b05a51" text-anchor="end" font-family="ui-monospace,monospace">阈值 ' +
+      fix.TH.toFixed(1) + '</text>';
+
+    /* 局部基线 */
+    var bd = '';
+    for (i = 0; i < N; i++) {
+      bd += (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(ai.base[i]).toFixed(1);
+    }
+    s += '<path d="' + bd + '" fill="none" stroke="#2f7d6b" stroke-width="1" ' +
+      'stroke-dasharray="4 3" stroke-opacity=".6"/>';
+
+    /* 曲线 */
+    var pd = '';
+    for (i = 0; i < N; i++) {
+      pd += (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(sig[i]).toFixed(1);
+    }
+    s += '<path d="' + pd + '" fill="none" stroke="#4d565b" stroke-width="1.35" ' +
+      'stroke-linejoin="round"/>';
+
+    /* 峰顶标记 */
+    for (i = 0; i < ai.segs.length; i++) {
+      var q = ai.segs[i];
+      var col = q.kept ? '#2f7d6b' : '#9ba3a9';
+      s += '<circle cx="' + X(q.apex).toFixed(1) + '" cy="' + Y(sig[q.apex]).toFixed(1) +
+        '" r="3" fill="' + col + '" stroke="#ffffff" stroke-width="1.1"/>';
+      s += '<text x="' + X(q.apex).toFixed(1) + '" y="' +
+        (Y(sig[q.apex]) - 7).toFixed(1) + '" font-size="7.4" fill="' + col +
+        '" text-anchor="middle" font-weight="600">' +
+        (q.kept ? '显示' : '剔除') + '</text>';
+    }
+
+    /* 轴 */
+    s += '<line x1="' + LX + '" y1="' + BY + '" x2="' + RX + '" y2="' + BY +
+      '" stroke="#ddd7c8"/>';
+    [0, 60, 120, 180, 210].forEach(function (t) {
+      var xx = X(t);
+      s += '<text x="' + xx.toFixed(1) + '" y="' + (BY + 30) + '" font-size="7.4" ' +
+        'fill="#9ba3a9" text-anchor="middle" font-family="ui-monospace,monospace">' +
+        t + '</text>';
+    });
+    s += '<text x="' + RX + '" y="' + (BY + 30) + '" font-size="7.4" fill="#9ba3a9" ' +
+      'text-anchor="end" font-family="ui-monospace,monospace">min</text>';
+    s += '<text x="4" y="' + (TY + 4) + '" font-size="7.4" fill="#9ba3a9" ' +
+      'font-family="ui-monospace,monospace">全烃 %</text>';
+
+    document.getElementById('chart').innerHTML = s;
+  }
+
+  /* =========================================================
+     四、侧栏
+     ========================================================= */
+  function drawSide(sig, fix, ai) {
+    /* 真值召回：油气层、薄层 */
+    function near(apex, at) { return Math.abs(apex - at) <= 6; }
+
+    var oilHit = 0, thinHit = 0, falseRuns = 0, i;
+    for (i = 0; i < ai.segs.length; i++) {
+      var g = ai.segs[i];
+      if (!g.kept) continue;
+      if (near(g.apex, POS.oil)) oilHit = 1;
+      else if (near(g.apex, POS.thin)) thinHit = 1;
+      else falseRuns++;
+    }
+    var recall = (oilHit + thinHit) / 2;
+
+    /* 固定阈值的表现 */
+    var fOil = 0, fThin = 0, fFalse = 0;
+    for (i = 0; i < fix.runs.length; i++) {
+      var r = fix.runs[i];
+      var mid = Math.round((r[0] + r[1]) / 2);
+      var hitOil = (POS.oil >= r[0] - 4 && POS.oil <= r[1] + 4);
+      var hitThin = (POS.thin >= r[0] - 4 && POS.thin <= r[1] + 4);
+      if (hitOil) fOil = 1;
+      else if (hitThin) fThin = 1;
+      else fFalse++;
+    }
+    var fRecall = (fOil + fThin) / 2;
+
+    document.getElementById('metrics').innerHTML =
+      '<div class="metric ' + (recall === 1 ? 'good' : 'bad') + '">' +
+        '<div class="l">分段召回</div><div class="v">' +
+        (recall * 100).toFixed(0) + '<small>%</small></div></div>' +
+      '<div class="metric ' + (thinHit ? 'good' : 'bad') + '">' +
+        '<div class="l">薄层</div><div class="v" style="font-size:13px">' +
+        (thinHit ? '检出' : '漏检') + '</div></div>' +
+      '<div class="metric ' + (falseRuns ? 'warn' : 'good') + '">' +
+        '<div class="l">误报段</div><div class="v">' +
+        falseRuns + '<small>段</small></div></div>' +
+      '<div class="metric ' + (fFalse ? 'bad' : 'good') + '">' +
+        '<div class="l">固定阈值误报</div><div class="v">' +
+        fFalse + '<small>段</small></div></div>';
+
+    /* 判词 */
+    var vEl = document.getElementById('verdict'), html, vc;
+
+    if (!oilHit) {
+      vc = 'bad';
+      html = '连油气层都没检出——<b>曲线被异常拉平了</b>，先把干扰强度调回去。';
+    } else if (!thinHit) {
+      vc = 'warn';
+      html = '薄层被背景吞掉了。<b>把「薄层幅度」往上拉</b>看它在什么位置能浮出局部基线——' +
+        '这就是解释员漏薄层的真实机制：不是没看，是看不出来。';
+    } else if (falseRuns > 0) {
+      vc = 'warn';
+      html = '薄层检出了，但也把干扰判成了显示（误报 <b>' + falseRuns +
+        ' 段</b>）。<b>这时要靠与泵况、钻时联动来剔除</b>，而不是继续调阈值。';
+    } else {
+      vc = 'ok';
+      html = '全部命中且无误报。注意固定阈值这一侧：它报了 <b>' + fFalse +
+        ' 段</b>假警，还漏了薄层——<b>同一个阈值在两端同时失效</b>。';
+    }
+    vEl.className = 'verdict ' + vc;
+    vEl.innerHTML = html;
+
+    /* 分段结果表 */
+    var rows = '', k;
+    for (k = 0; k < Math.min(5, ai.segs.length); k++) {
+      var g2 = ai.segs[k];
+      rows += '<tr><td>#' + (k + 1) + ' · ' + g2.apex + '</td>' +
+        '<td>' + g2.width + '</td>' +
+        '<td class="' + (g2.kept ? 'ok' : '') + '">' +
+        (g2.kept ? '显示' : g2.kind) + '</td></tr>';
+    }
+    document.getElementById('tbl').innerHTML =
+      '<thead><tr><th>段</th><th>宽</th><th>判定</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>';
+  }
+
+  /* =========================================================
+     五、主循环
+     ========================================================= */
+  var sInt = document.getElementById('s-interf');
+  var sThin = document.getElementById('s-thin');
+  var vInt = document.getElementById('v-interf');
+  var vThin = document.getElementById('v-thin');
+
+  var state = { interf: 60, thin: 22 };
+
+  function paint() {
+    state.interf = Number(sInt.value);
+    state.thin = Number(sThin.value);
+    vInt.textContent = state.interf + '%';
+    vThin.textContent = state.thin;
+
+    var sig = build(state);
+    var fix = fixedRuns(sig);
+    var ai = aiSegments(sig);
+
+    drawChart(sig, fix, ai);
+    drawSide(sig, fix, ai);
+  }
+
+  sInt.addEventListener('input', paint);
+  sThin.addEventListener('input', paint);
+
+  paint();
+
+})();
+</script>
+
+</body>
+</html>

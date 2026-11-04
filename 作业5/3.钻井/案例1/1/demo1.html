@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>钻速预测与参数优化 · 示范</title>
+<style>
+  :root{
+    --jade:#2f7d6b; --jade-d:#235f51; --jade-l:#e6f1ec;
+    --clay:#b26a39; --clay-l:#f8ecdf;
+    --ink:#242b2e; --ink-2:#4d565b; --ink-3:#79828a; --ink-4:#9ba3a9;
+    --line:#e9e4d8; --line-2:#ddd7c8; --line-3:#c9c2b0;
+    --card:#ffffff; --soft:#fdfcf9; --paper:#fbfaf6;
+    --ok:#3f8560; --warn:#a97a1c; --bad:#b05a51;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:16px 18px 22px; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+
+  .kick{ font-family:var(--mono); font-size:9px; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--jade-d); }
+  h1{ font-size:17px; font-weight:650; margin:7px 0 0; letter-spacing:-.01em; }
+  .desc{ margin:7px 0 0; font-size:12px; color:var(--ink-3);
+    line-height:1.7; max-width:74ch; }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) 236px;
+    gap:12px; margin-top:14px; align-items:start; }
+  .stage{ background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:10px; min-width:0; }
+  .stage svg{ display:block; width:100%; height:auto; }
+  .legend{ display:flex; flex-wrap:wrap; gap:11px; margin-top:8px;
+    font-size:10px; color:var(--ink-4); }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend i{ width:11px; height:11px; border-radius:2px; display:block; }
+  .legend i.line{ height:0; border-top:1px dashed currentColor; background:none !important; }
+
+  .side{ display:flex; flex-direction:column; gap:9px; min-width:0; }
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .metric{ background:var(--card); padding:8px 10px; }
+  .metric .l{ font-family:var(--mono); font-size:7.8px; letter-spacing:.08em;
+    color:var(--ink-4); white-space:nowrap; }
+  .metric .v{ font-family:var(--mono); font-size:16px; margin-top:4px;
+    line-height:1; color:var(--ink); }
+  .metric .v small{ font-size:8.5px; color:var(--ink-4); margin-left:2px; }
+  .metric.good .v{ color:var(--ok); }
+  .metric.warn .v{ color:var(--warn); }
+  .metric.bad .v{ color:var(--bad); }
+
+  .verdict{ font-size:11.4px; line-height:1.7; color:var(--ink-2);
+    border-left:2.5px solid var(--line-2); padding-left:9px; }
+  .verdict b{ color:var(--ink); }
+  .verdict.ok{ border-color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); }
+
+  .card{ border:1px solid var(--line); border-radius:8px;
+    background:var(--soft); padding:9px 10px; }
+  .card h5{ margin:0 0 6px; font-family:var(--mono); font-size:7.8px;
+    letter-spacing:.1em; color:var(--ink-4); font-weight:400; text-transform:uppercase; }
+  table{ width:100%; border-collapse:collapse; font-size:10.2px; }
+  td{ padding:3.5px 0; border-bottom:1px solid var(--line); color:var(--ink-3); }
+  tr:last-child td{ border-bottom:0; }
+  td:last-child{ text-align:right; font-family:var(--mono); color:var(--ink-2); }
+  td.ok{ color:var(--ok); } td.bad{ color:var(--bad); }
+
+  .ctrls{ display:flex; flex-wrap:wrap; align-items:center; gap:18px;
+    margin-top:12px; padding:11px 14px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; }
+  .ctl{ display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--ink-2); }
+  .ctl label{ font-family:var(--mono); font-size:9px; letter-spacing:.06em;
+    color:var(--ink-3); white-space:nowrap; }
+  .ctl input[type=range]{ -webkit-appearance:none; appearance:none;
+    width:118px; height:4px; border-radius:2px; background:var(--line-2);
+    outline:none; cursor:pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid var(--card); box-shadow:0 0 0 1px var(--jade); cursor:grab; }
+  .ctl input[type=range]::-moz-range-thumb{ width:13px; height:13px;
+    border-radius:50%; background:var(--jade); border:2.5px solid var(--card); cursor:grab; }
+  .ctl .val{ font-family:var(--mono); font-size:10.5px; color:var(--jade-d);
+    min-width:34px; text-align:right; }
+
+  button{ font-family:inherit; font-size:12.5px; font-weight:600;
+    padding:8px 15px; border-radius:7px; border:1px solid var(--jade);
+    background:var(--jade); color:#fff; cursor:pointer;
+    transition:background .15s, box-shadow .15s; }
+  button:hover{ background:var(--jade-d); box-shadow:0 4px 12px -5px rgba(47,125,107,.5); }
+  button:active{ transform:translateY(1px); }
+
+  @media (max-width:720px){
+    body{ padding:13px 13px 18px; }
+    .grid{ grid-template-columns:1fr; }
+    .ctrls{ gap:12px; }
+    .ctl{ width:100%; justify-content:space-between; }
+    .ctl input[type=range]{ flex:1; width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="kick">INTERACTIVE · 可行域搜索</div>
+<h1>在安全边界内找最高钻速</h1>
+<p class="desc">
+  横轴钻压、纵轴转速。颜色越深钻速越高，灰格是超出扭矩 / 立压 / ECD 余量的不可行解。
+  拖滑杆移动方案点，或点「自动寻优」让优化器在可行域里搜索——<b>它只在绿格里找，从不越界</b>。
+</p>
+
+<div class="grid">
+  <div class="stage">
+    <svg id="chart" viewBox="0 0 506 286" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="钻压与转速的可行域"></svg>
+    <div class="legend">
+      <span><i style="background:#2f7d6b;opacity:.75"></i>可行域（越深钻速越高）</span>
+      <span><i style="background:#e9e4d8"></i>不可行</span>
+      <span><i class="line" style="color:#242b2e"></i>当前方案</span>
+      <span><i style="background:#b26a39"></i>搜索到的最优</span>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="metrics" id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h5>搜索空间</h5>
+      <table id="tbl"></table>
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <div class="ctl">
+    <label>钻压 kN</label>
+    <input type="range" id="s-wob" min="8" max="42" step="1" value="22">
+    <span class="val" id="v-wob">22</span>
+  </div>
+  <div class="ctl">
+    <label>转速 rpm</label>
+    <input type="range" id="s-rpm" min="40" max="160" step="2" value="110">
+    <span class="val" id="v-rpm">110</span>
+  </div>
+  <button id="run" type="button">自动寻优</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 物理/经验模型 ---------- */
+  var WS = 26;          /* founder 点附近 */
+  var TQL = 34, SPL = 24, E0 = 1.245, FR = 1.30;
+
+  var W0 = 6, W1 = 44, R0 = 40, R1 = 160;
+  var CO = 19, RO = 12, CW = 24, CH = 17;
+  var X0 = 30, Y0 = 26;
+  var SW = X0 + CO * CW + 18;
+  var SH = Y0 + RO * CH + 46;
+
+  function tq(w, r)  { return 6 + .55 * w * r / 120; }
+  function spp(r)    { return 6 + r * .09; }
+  function ecd(w, r) { return E0 + r * .00035 + w * .0005; }
+
+  /* 钻速：低钻压近似与钻压成正比，过 founder 点后衰减 */
+  function rop(w, r) {
+    var eff = w <= WS ? 1 : Math.max(.16, 1 - .92 * Math.pow((w - WS) / 20, 1.5));
+    return 30 * (r / 120) * (1 - Math.exp(-w / 12)) * eff;
+  }
+
+  function margins(w, r) {
+    return {
+      tq: (TQL - tq(w, r)) / TQL,
+      sp: (SPL - spp(r)) / SPL,
+      ec: FR - ecd(w, r)
+    };
+  }
+
+  function feasible(w, r) {
+    var m = margins(w, r);
+    return m.tq >= .15 && m.sp >= .10 && m.ec > 0;
+  }
+
+  function cell(i, j) {
+    return {
+      w: W0 + (i + .5) * (W1 - W0) / CO,
+      r: R0 + (j + .5) * (R1 - R0) / RO
+    };
+  }
+
+  /* ---------- 预计算：最大值 / 可行解 / 最优 ---------- */
+  var mx = 0, nOK = 0, nAll = CO * RO;
+  var best = { w: 30, r: 120, v: -1 };
+  var i, j;
+
+  for (i = 0; i < CO; i++) {
+    for (j = 0; j < RO; j++) {
+      var c0 = cell(i, j);
+      var v0 = rop(c0.w, c0.r);
+      if (v0 > mx) mx = v0;
+      if (!feasible(c0.w, c0.r)) continue;
+      nOK++;
+      if (v0 > best.v) { best = { w: c0.w, r: c0.r, v: v0 }; }
+    }
+  }
+
+  /* ---------- DOM ---------- */
+  var svg = document.getElementById('chart');
+  var elMetrics = document.getElementById('metrics');
+  var elVerdict = document.getElementById('verdict');
+  var elTbl = document.getElementById('tbl');
+  var sWob = document.getElementById('s-wob');
+  var sRpm = document.getElementById('s-rpm');
+  var vWob = document.getElementById('v-wob');
+  var vRpm = document.getElementById('v-rpm');
+  var btn = document.getElementById('run');
+
+  /* ---------- 绘制 ---------- */
+  function drawChart(wob, rpm) {
+    var s = '';
+    var cx, cy, k, t;
+
+    s += '<rect width="' + SW + '" height="' + SH + '" fill="#ffffff"/>';
+    s += '<text x="' + X0 + '" y="12" font-size="8" fill="#9ba3a9" ' +
+      'font-family="ui-monospace,monospace">WOB →</text>';
+
+    /* 网格 */
+    for (i = 0; i < CO; i++) {
+      for (j = 0; j < RO; j++) {
+        var x = X0 + i * CW;
+        var y = Y0 + (RO - 1 - j) * CH;
+        var p = cell(i, j);
+        var rel = rop(p.w, p.r) / mx;
+        var rw = CW - 1.5, rh = CH - 1.5;
+
+        if (feasible(p.w, p.r)) {
+          s += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+            '" width="' + rw + '" height="' + rh + '" rx="2" fill="#2f7d6b" ' +
+            'fill-opacity="' + (.10 + rel * .62).toFixed(2) + '"/>';
+        } else {
+          s += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+            '" width="' + rw + '" height="' + rh + '" rx="2" fill="#e9e4d8"/>';
+          s += '<line x1="' + (x + 3).toFixed(1) + '" y1="' + (y + CH - 4).toFixed(1) +
+            '" x2="' + (x + CW - 4).toFixed(1) + '" y2="' + (y + 3).toFixed(1) +
+            '" stroke="#c9c2b0" stroke-width=".8" stroke-opacity=".7"/>';
+        }
+      }
+    }
+
+    /* 当前点 */
+    cx = X0 + (wob - W0) / (W1 - W0) * CO * CW;
+    cy = Y0 + (1 - (rpm - R0) / (R1 - R0)) * RO * CH;
+    var good = feasible(wob, rpm);
+    s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) +
+      '" r="7" fill="none" stroke="' + (good ? '#242b2e' : '#b05a51') +
+      '" stroke-width="2"/>';
+    s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) +
+      '" r="2.6" fill="' + (good ? '#242b2e' : '#b05a51') + '"/>';
+
+    /* 最优（菱形） */
+    var bx = X0 + (best.w - W0) / (W1 - W0) * CO * CW;
+    var by = Y0 + (1 - (best.r - R0) / (R1 - R0)) * RO * CH;
+    s += '<path d="M' + bx.toFixed(1) + ' ' + (by - 6).toFixed(1) +
+      'l6 6l-6 6l-6-6z" fill="#b26a39" fill-opacity=".88"/>';
+
+    /* 最优到当前点连线 */
+    if (best.v > 0) {
+      s += '<line x1="' + bx.toFixed(1) + '" y1="' + by.toFixed(1) +
+        '" x2="' + cx.toFixed(1) + '" y2="' + cy.toFixed(1) +
+        '" stroke="#b26a39" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".55"/>';
+    }
+
+    /* 轴刻度 */
+    var wTicks = [6, 16, 26, 36, 44];
+    for (k = 0; k < wTicks.length; k++) {
+      t = wTicks[k];
+      s += '<text x="' + (X0 + (t - W0) / (W1 - W0) * CO * CW).toFixed(1) +
+        '" y="' + (Y0 + RO * CH + 14) + '" font-size="7.4" fill="#9ba3a9" ' +
+        'text-anchor="middle" font-family="ui-monospace,monospace">' + t + '</text>';
+    }
+    var rTicks = [40, 80, 120, 160];
+    for (k = 0; k < rTicks.length; k++) {
+      t = rTicks[k];
+      s += '<text x="' + (X0 - 5) + '" y="' +
+        (Y0 + (1 - (t - R0) / (R1 - R0)) * RO * CH + 3).toFixed(1) +
+        '" font-size="7.4" fill="#9ba3a9" text-anchor="end" ' +
+        'font-family="ui-monospace,monospace">' + t + '</text>';
+    }
+
+    s += '<text x="' + X0 + '" y="' + (SH - 8) + '" font-size="8" fill="#9ba3a9">' +
+      '灰格 = 超出安全余量，不可行</text>';
+    s += '<text x="' + (SW - 18) + '" y="' + (SH - 8) + '" font-size="8" ' +
+      'fill="#9ba3a9" text-anchor="end" font-family="ui-monospace,monospace">' +
+      'rpm ↑</text>';
+
+    svg.innerHTML = s;
+  }
+
+  /* ---------- 指标与判词 ---------- */
+  function drawSide(wob, rpm) {
+    var m = margins(wob, rpm);
+    var good = feasible(wob, rpm);
+    var rv = rop(wob, rpm);
+
+    function cls(ok, warn) {
+      if (ok) return 'good';
+      return warn ? 'warn' : 'bad';
+    }
+
+    elMetrics.innerHTML =
+      '<div class="metric ' + (rv > 20 ? 'good' : '') + '">' +
+        '<div class="l">预测 ROP</div><div class="v">' + rv.toFixed(1) +
+        '<small>m/h</small></div></div>' +
+      '<div class="metric"><div class="l">可行域最优</div><div class="v">' +
+        best.v.toFixed(1) + '<small>m/h</small></div></div>' +
+      '<div class="metric ' + cls(m.tq >= .15, m.tq > 0) + '">' +
+        '<div class="l">扭矩余量</div><div class="v">' +
+        (m.tq * 100).toFixed(0) + '<small>%</small></div></div>' +
+      '<div class="metric ' + cls(m.sp >= .10, m.sp > 0) + '">' +
+        '<div class="l">立压余量</div><div class="v">' +
+        (m.sp * 100).toFixed(0) + '<small>%</small></div></div>';
+
+    if (good) {
+      var gap = rv > 0 ? ((best.v - rv) / rv * 100) : 0;
+      elVerdict.className = 'verdict ok';
+      elVerdict.innerHTML =
+        '当前方案在可行域内。同样的钻头，最优解比它再快 <b>' +
+        gap.toFixed(0) + '%</b>——这部分差距就是"参数没贴着地层走"的代价。';
+    } else {
+      elVerdict.className = 'verdict bad';
+      elVerdict.innerHTML =
+        '当前方案<b>不可行</b>：至少一项余量已经为负。优化器不会考虑它，' +
+        '因为它在现场会变成卡钻或井漏。';
+    }
+
+    elTbl.innerHTML =
+      '<tr><td>网格总数</td><td>' + nAll + '</td></tr>' +
+      '<tr><td>可行解</td><td class="ok">' + nOK + '</td></tr>' +
+      '<tr><td>被约束剔除</td><td class="bad">' + (nAll - nOK) + '</td></tr>' +
+      '<tr><td>当前 ECD</td><td class="' + (m.ec > 0 ? 'ok' : 'bad') + '">' +
+        ecd(wob, rpm).toFixed(3) + '</td></tr>';
+  }
+
+  /* ---------- 主循环 ---------- */
+  function paint() {
+    var wob = Number(sWob.value);
+    var rpm = Number(sRpm.value);
+    vWob.textContent = wob;
+    vRpm.textContent = rpm;
+    drawChart(wob, rpm);
+    drawSide(wob, rpm);
+  }
+
+  sWob.addEventListener('input', paint);
+  sRpm.addEventListener('input', paint);
+
+  btn.addEventListener('click', function () {
+    sWob.value = Math.round(best.w);
+    sRpm.value = Math.round(best.r);
+    paint();
+  });
+
+  paint();
+
+})();
+</script>
+
+</body>
+</html>

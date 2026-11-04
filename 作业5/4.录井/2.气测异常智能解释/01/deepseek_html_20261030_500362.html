@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>气测异常智能解释 · 时序检测与流体判别</title>
+<style>
+  :root{
+    --jade:#2f8f7a; --jade-1:#eaf5f1; --jade-2:#c6e4da; --jade-3:#1f7261;
+    --clay:#b4653f; --clay-1:#fbf1ea; --clay-2:#eed6c6;
+    --ink:#1f2a30; --ink-1:#eef1f3; --ink-2:#d5dde1; --ink-3:#5b6b74; --ink-4:#9aa8b0;
+    --bg:#f4f6f6; --panel:#ffffff; --danger:#c0392b; --danger-1:#fbeae7;
+    --warn:#d4a017; --warn-1:#fdf8e7;
+    --blue:#2980b9; --blue-1:#eaf2f8;
+    --orange:#e67e22; --orange-1:#fdf2e9;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ height:100%; display:flex; flex-direction:column; background:var(--bg); }
+
+  /* 头部 */
+  .topbar{
+    height:42px; flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--ink-2);
+  }
+  .topbar .dot{ width:10px; height:10px; border-radius:50%; background:var(--jade); }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; }
+  
+  /* 布局 */
+  .demo-layout{ flex:1; display:flex; gap:10px; padding:10px; min-height:0; }
+  .panel-ctrl{ flex:0 0 220px; width:220px; display:flex; flex-direction:column; gap:8px; }
+  .demo-stage{ flex:1; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  
+  /* 面板通用 */
+  .panel{
+    background:var(--panel); border:1px solid var(--ink-2); border-radius:10px;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .panel-title{
+    font-size:12.5px; font-weight:600; color:var(--ink-3);
+    padding:8px 12px; border-bottom:1px solid var(--ink-1);
+    display:flex; align-items:center; gap:6px;
+  }
+  .panel-title::before{ content:''; width:3px; height:12px; background:var(--jade); border-radius:2px; }
+  
+  /* 左侧控制 */
+  .ctrl-body{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+  .scenario-list { display:flex; flex-direction:column; gap:6px; }
+  .btn-scn {
+    width:100%; height:34px; border-radius:6px; font-size:12.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid var(--ink-2);
+    background:#fff; color:var(--ink-3); text-align:left; padding:0 10px;
+    display:flex; align-items:center; justify-content:space-between;
+    transition:all .15s ease;
+  }
+  .btn-scn:hover { background:var(--ink-1); }
+  .btn-scn.active { border-color:var(--jade); background:var(--jade-1); color:var(--jade-3); }
+  
+  .field{ display:flex; flex-direction:column; gap:4px; margin-top:8px; }
+  .field-head{ display:flex; justify-content:space-between; font-size:12px; color:var(--ink-3); }
+  .field-head b{ color:var(--jade-3); font-family:monospace; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:2px;
+    background:var(--ink-2); outline:none; margin-top:4px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--jade); cursor:pointer;
+  }
+  
+  .hint{ font-size:11.5px; color:var(--jade-3); background:var(--jade-1); padding:8px; border-radius:6px; line-height:1.5; }
+
+  /* 主图与底图 */
+  .panel-main{ flex:1; min-height:0; }
+  .demo-bottom{ flex:0 0 180px; display:flex; gap:10px; }
+  .panel-comp{ flex:1.2; min-width:0; }
+  .panel-met{ flex:1; min-width:0; padding:8px 12px; display:flex; flex-direction:column; justify-content:space-around; }
+  
+  .svg-box{ flex:1; padding:4px; min-height:0; }
+  .svg-box svg{ width:100%; height:100%; display:block; }
+
+  /* 指标 */
+  .metric{ display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px dashed var(--ink-1); }
+  .metric:last-child{ border:none; }
+  .m-label{ font-size:12px; color:var(--ink-3); width:70px; }
+  .m-value{ font-size:15px; font-weight:600; font-family:monospace; }
+  .m-value.is-warn{ color:var(--warn); }
+  .m-value.is-bad{ color:var(--danger); }
+  .m-value.is-ok{ color:var(--jade-3); }
+  .badge{ display:inline-flex; align-items:center; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; }
+  .badge.ok{ color:var(--jade-3); background:var(--jade-1); }
+  .badge.warn{ color:var(--warn); background:var(--warn-1); }
+  .badge.bad{ color:var(--danger); background:var(--danger-1); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <span class="dot"></span>
+    <h1>气测异常智能解释 · 时序检测与流体判别</h1>
+  </div>
+
+  <div class="demo-layout">
+    <!-- 左侧控制 -->
+    <div class="panel-ctrl">
+      <div class="panel" style="flex:1">
+        <div class="panel-title">快捷定位</div>
+        <div class="ctrl-body">
+          <div class="scenario-list" id="scenario-list">
+            <button class="btn-scn active" data-scn="oil"><span>油层</span><span style="color:var(--orange)">高幅</span></button>
+            <button class="btn-scn" data-scn="gas"><span>气层</span><span style="color:var(--danger)">极高</span></button>
+            <button class="btn-scn" data-scn="thin"><span>薄气层</span><span style="color:var(--warn)">微弱</span></button>
+            <button class="btn-scn" data-scn="water"><span>水层</span><span style="color:var(--blue)">低幅</span></button>
+          </div>
+          
+          <div class="field">
+            <div class="field-head"><span>模拟深度</span><b id="v-depth">32.0 m</b></div>
+            <input type="range" id="s-depth" min="0" max="100" step="0.5" value="32">
+          </div>
+          
+          <div class="hint">
+            <b>AI 逻辑：</b>结合峰宽与组分剔除干扰，识别极薄的微弱气层。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧舞台 -->
+    <div class="demo-stage">
+      <div class="panel panel-main">
+        <div class="panel-title">全烃气测曲线与 AI 解释结果</div>
+        <div class="svg-box"><svg id="svg-main" viewBox="0 0 680 300" preserveAspectRatio="xMidYMid meet"></svg></div>
+      </div>
+      
+      <div class="demo-bottom">
+        <div class="panel panel-comp">
+          <div class="panel-title">当前深度组分分析 (C1-C5)</div>
+          <div class="svg-box"><svg id="svg-comp" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid meet"></svg></div>
+        </div>
+        <div class="panel panel-met">
+          <div class="metric">
+            <div class="m-label">流体性质</div>
+            <div class="m-value" id="m-type">—</div>
+          </div>
+          <div class="metric">
+            <div class="m-label">全烃峰值</div>
+            <div class="m-value" id="m-peak">0<em>ppm</em></div>
+          </div>
+          <div class="metric">
+            <div class="m-label">置信度</div>
+            <div class="m-value" id="m-conf">0<em>%</em></div>
+          </div>
+          <div class="metric">
+            <div class="m-label">薄层预警</div>
+            <div class="m-value" id="m-flag"><span class="badge ok">正常</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var state = { depth: 32, data: [] };
+  var els = {};
+
+  function q(id) { return document.getElementById(id); }
+
+  function initData() {
+    var data = [];
+    for (var i = 0; i <= 100; i += 0.5) {
+      var base = 80 + Math.sin(i * 0.1) * 20 + Math.random() * 10;
+      var total = base;
+      var c1 = 100, c2 = 0, c3 = 0, ic4 = 0, nc4 = 0;
+      var type = '背景';
+      
+      // 10-10.5m 接单根气干扰
+      if (i >= 10 && i <= 10.5) {
+        total = 4000 + Math.random() * 200;
+        c1 = 98; c2 = 2; c3 = 0; ic4 = 0; nc4 = 0;
+        type = '干扰';
+      }
+      // 30-35m 油层
+      else if (i >= 30 && i <= 35) {
+        var amp = Math.sin((i - 30) / 5 * Math.PI);
+        total = base + 6000 * amp;
+        c1 = 45; c2 = 25; c3 = 15; ic4 = 10; nc4 = 5;
+        type = '油层';
+      }
+      // 55-60m 气层
+      else if (i >= 55 && i <= 60) {
+        var amp = Math.sin((i - 55) / 5 * Math.PI);
+        total = base + 18000 * amp;
+        c1 = 92; c2 = 5; c3 = 2; ic4 = 1; nc4 = 0;
+        type = '气层';
+      }
+      // 75-75.5m 薄气层
+      else if (i >= 75 && i <= 75.5) {
+        total = base + 400;
+        c1 = 85; c2 = 10; c3 = 4; ic4 = 1; nc4 = 0;
+        type = '薄气层';
+      }
+      // 85-90m 水层
+      else if (i >= 85 && i <= 90) {
+        var amp = Math.sin((i - 85) / 5 * Math.PI);
+        total = base + 500 * amp;
+        c1 = 70; c2 = 20; c3 = 8; ic4 = 2; nc4 = 0;
+        type = '水层';
+      }
+      
+      data.push({ depth: i, total: total, c1: c1, c2: c2, c3: c3, ic4: ic4, nc4: nc4, type: type });
+    }
+    state.data = data;
+  }
+
+  function renderMain() {
+    var W = 680, H = 300, ML = 60, MR = 30, MT = 20, MB = 40;
+    var pw = W - ML - MR, ph = H - MT - MB;
+    var p = ['<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>'];
+
+    var maxDepth = 100, maxGas = 20000;
+    function tx(d) { return ML + (d / maxDepth) * pw; }
+    function ty(g) { return MT + ph - (Math.max(0, Math.min(g, maxGas)) / maxGas) * ph; }
+
+    // 网格
+    for (var gi = 0; gi <= 5; gi++) {
+      var gd = gi * 20;
+      p.push('<line x1="' + tx(gd) + '" y1="' + MT + '" x2="' + tx(gd) + '" y2="' + (MT + ph) + '" stroke="#eef1f3" stroke-width="1"/>');
+      p.push('<text x="' + tx(gd) + '" y="' + (MT + ph + 16) + '" text-anchor="middle" font-size="10" fill="#9aa8b0">' + gd + 'm</text>');
+    }
+    
+    // 背景线
+    p.push('<line x1="' + ML + '" y1="' + ty(100) + '" x2="' + (ML + pw) + '" y2="' + ty(100) + '" stroke="#d5dde1" stroke-width="1.5" stroke-dasharray="4 3"/>');
+
+    // 全烃曲线
+    var d = '';
+    for (var i = 0; i < state.data.length; i++) {
+      var pt = state.data[i];
+      d += (i === 0 ? 'M' : 'L') + tx(pt.depth) + ',' + ty(pt.total);
+    }
+    p.push('<path d="' + d + '" fill="none" stroke="#2f8f7a" stroke-width="2.5" stroke-linejoin="round"/>');
+
+    // AI 识别框
+    var segments = [];
+    var currentType = '背景';
+    var startD = 0;
+    for (var i = 0; i < state.data.length; i++) {
+      var pt = state.data[i];
+      if (pt.type !== currentType) {
+        if (currentType !== '背景') segments.push({ start: startD, end: pt.depth, type: currentType });
+        currentType = pt.type;
+        startD = pt.depth;
+      }
+    }
+    if (currentType !== '背景') segments.push({ start: startD, end: 100, type: currentType });
+
+    for (var i = 0; i < segments.length; i++) {
+      var seg = segments[i];
+      var x0 = tx(seg.start), x1 = tx(seg.end), w = x1 - x0;
+      var rectColor = 'rgba(47,143,122,0.1)', strokeColor = '#2f8f7a', textColor = '#1f7261', label = '';
+
+      if (seg.type === '干扰') { rectColor = 'rgba(154,168,176,0.15)'; strokeColor = '#9aa8b0'; textColor = '#5b6b74'; label = '接单根干扰'; }
+      else if (seg.type === '油层') { rectColor = 'rgba(230,126,34,0.15)'; strokeColor = '#e67e22'; textColor = '#e67e22'; label = '油层'; }
+      else if (seg.type === '气层') { rectColor = 'rgba(192,57,43,0.15)'; strokeColor = '#c0392b'; textColor = '#c0392b'; label = '气层'; }
+      else if (seg.type === '薄气层') { rectColor = 'rgba(212,160,23,0.15)'; strokeColor = '#d4a017'; textColor = '#d4a017'; label = '薄气层 (弱异常)'; }
+      else if (seg.type === '水层') { rectColor = 'rgba(41,128,185,0.15)'; strokeColor = '#2980b9'; textColor = '#2980b9'; label = '水层'; }
+
+      p.push('<rect x="' + x0 + '" y="' + MT + '" width="' + w + '" height="' + ph + '" fill="' + rectColor + '" stroke="' + strokeColor + '" stroke-width="1.5" stroke-dasharray="4 3"/>');
+      
+      if (seg.type === '薄气层') {
+        p.push('<text x="' + (x0 + w/2) + '" y="' + (MT - 5) + '" text-anchor="middle" font-size="11" fill="' + textColor + '" font-weight="600">' + label + '</text>');
+        p.push('<path d="M' + (x0 + w/2) + ',' + (MT - 3) + ' L' + (x0 + w/2) + ',' + ty(1000) + '" stroke="' + strokeColor + '" stroke-width="1" stroke-dasharray="2 2"/>');
+      } else {
+        p.push('<text x="' + (x0 + w/2) + '" y="' + (MT - 5) + '" text-anchor="middle" font-size="11" fill="' + textColor + '" font-weight="600">' + label + '</text>');
+      }
+    }
+
+    // 当前深度指针
+    var curX = tx(state.depth);
+    p.push('<line x1="' + curX + '" y1="' + MT + '" x2="' + curX + '" y2="' + (MT + ph) + '" stroke="#1f2a30" stroke-width="2" opacity="0.6"/>');
+    p.push('<circle cx="' + curX + '" cy="' + MT + '" r="5" fill="#1f2a30" opacity="0.6"/>');
+
+    return p.join('');
+  }
+
+  function renderComp() {
+    var W = 300, H = 150, ML = 30, MR = 15, MT = 20, MB = 30;
+    var pw = W - ML - MR, ph = H - MT - MB;
+    var p = ['<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>'];
+
+    var idx = Math.max(0, Math.min(state.data.length - 1, Math.round(state.depth * 2)));
+    var pt = state.data[idx];
+    var items = [
+      { label: 'C1', val: pt.c1, color: '#2f8f7a' },
+      { label: 'C2', val: pt.c2, color: '#b4653f' },
+      { label: 'C3', val: pt.c3, color: '#d4a017' },
+      { label: 'iC4', val: pt.ic4, color: '#2980b9' },
+      { label: 'nC4', val: pt.nc4, color: '#7f8f98' }
+    ];
+
+    var barW = pw / items.length - 10;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var x = ML + i * (barW + 10) + 5;
+      var h = (it.val / 100) * ph;
+      var y = MT + ph - h;
+
+      p.push('<rect x="' + x + '" y="' + MT + '" width="' + barW + '" height="' + ph + '" fill="#f0f3f4" rx="2"/>');
+      if (it.val > 0) p.push('<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" fill="' + it.color + '" rx="2" opacity="0.85"/>');
+      p.push('<text x="' + (x + barW/2) + '" y="' + (MT + ph + 16) + '" text-anchor="middle" font-size="10" fill="#5b6b74">' + it.label + '</text>');
+      if (it.val > 0) p.push('<text x="' + (x + barW/2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="10" fill="' + it.color + '" font-weight="600">' + it.val + '%</text>');
+    }
+    return p.join('');
+  }
+
+  function renderMetrics() {
+    var idx = Math.max(0, Math.min(state.data.length - 1, Math.round(state.depth * 2)));
+    var pt = state.data[idx];
+    var typeStr = pt.type, conf = 95, flagText = '正常', flagCls = 'ok';
+
+    if (typeStr === '背景') conf = 99;
+    else if (typeStr === '干扰') conf = 92;
+    else if (typeStr === '油层') conf = 88;
+    else if (typeStr === '气层') conf = 96;
+    else if (typeStr === '薄气层') { conf = 76; flagText = '薄层预警'; flagCls = 'warn'; }
+    else if (typeStr === '水层') conf = 85;
+
+    els.mType.textContent = typeStr === '背景' ? '—' : typeStr;
+    els.mType.className = 'm-value ' + (typeStr === '气层' ? 'is-bad' : typeStr === '油层' || typeStr === '薄气层' ? 'is-warn' : typeStr === '水层' ? 'is-ok' : '');
+    
+    els.mPeak.innerHTML = Math.round(pt.total) + '<em>ppm</em>';
+    els.mConf.innerHTML = conf + '<em>%</em>';
+    els.mConf.className = 'm-value ' + (conf >= 85 ? 'is-ok' : 'is-warn');
+    els.mFlag.innerHTML = '<span class="badge ' + flagCls + '">' + flagText + '</span>';
+  }
+
+  function updateUI() {
+    els.svgMain.innerHTML = renderMain();
+    els.svgComp.innerHTML = renderComp();
+    renderMetrics();
+  }
+
+  function onJump(scn) {
+    var d = { oil: 32, gas: 57, thin: 75, water: 87 }[scn] || 32;
+    state.depth = d;
+    els.sDepth.value = String(d);
+    els.vDepth.textContent = d.toFixed(1) + ' m';
+    
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', btns[i].getAttribute('data-scn') === scn);
+    
+    updateUI();
+  }
+
+  function init() {
+    els.svgMain = q('svg-main'); els.svgComp = q('svg-comp');
+    els.sDepth = q('s-depth'); els.vDepth = q('v-depth');
+    els.mType = q('m-type'); els.mPeak = q('m-peak'); els.mConf = q('m-conf'); els.mFlag = q('m-flag');
+
+    initData();
+
+    els.sDepth.addEventListener('input', function() {
+      state.depth = parseFloat(this.value);
+      els.vDepth.textContent = state.depth.toFixed(1) + ' m';
+      updateUI();
+    });
+
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener('click', function() { onJump(this.getAttribute('data-scn')); });
+    }
+
+    onJump('oil');
+  }
+
+  // 模拟官方要求的挂载钩子
+  window.__CASE_MOUNT__ = function () {
+    if (!document.getElementById('svg-main').innerHTML) init();
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>

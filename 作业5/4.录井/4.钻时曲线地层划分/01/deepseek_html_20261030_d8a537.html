@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>钻时曲线地层划分 · 时序变点检测与多源融合</title>
+<style>
+  :root{
+    --jade:#2f8f7a; --jade-1:#eaf5f1; --jade-2:#c6e4da; --jade-3:#1f7261;
+    --clay:#b4653f; --clay-1:#fbf1ea; --clay-2:#eed6c6;
+    --ink:#1f2a30; --ink-1:#eef1f3; --ink-2:#d5dde1; --ink-3:#5b6b74; --ink-4:#9aa8b0;
+    --bg:#f4f6f6; --panel:#ffffff; --danger:#c0392b; --danger-1:#fbeae7;
+    --warn:#d4a017; --warn-1:#fdf8e7;
+    --blue:#2980b9; --blue-1:#eaf2f8;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ height:100%; display:flex; flex-direction:column; background:var(--bg); }
+
+  .topbar{
+    height:42px; flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--ink-2);
+  }
+  .topbar .dot{ width:10px; height:10px; border-radius:50%; background:var(--jade); }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; }
+
+  .demo-layout{ flex:1; display:flex; gap:10px; padding:10px; min-height:0; }
+  .panel-ctrl{ flex:0 0 230px; width:230px; display:flex; flex-direction:column; gap:8px; }
+  .demo-stage{ flex:1; display:flex; flex-direction:column; gap:10px; min-width:0; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--ink-2); border-radius:10px;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .panel-title{
+    font-size:12.5px; font-weight:600; color:var(--ink-3);
+    padding:8px 12px; border-bottom:1px solid var(--ink-1);
+    display:flex; align-items:center; gap:6px;
+  }
+  .panel-title::before{ content:''; width:3px; height:12px; background:var(--jade); border-radius:2px; }
+
+  .ctrl-body{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field-head{ display:flex; justify-content:space-between; font-size:12px; color:var(--ink-3); }
+  .field-head b{ color:var(--jade-3); font-family:monospace; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:2px;
+    background:var(--ink-2); outline:none; margin-top:4px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--jade); cursor:pointer;
+  }
+
+  .btn{
+    width:100%; height:36px; border-radius:6px; font-size:13px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid transparent;
+    transition:background .15s ease; margin-top:4px;
+  }
+  .btn-primary{ background:var(--jade); color:#fff; }
+  .btn-primary:hover{ background:var(--jade-3); }
+  .btn-primary:disabled{ opacity:.6; cursor:progress; }
+
+  .hint{ font-size:11.5px; color:var(--jade-3); background:var(--jade-1); padding:8px; border-radius:6px; line-height:1.5; }
+
+  .panel-main{ flex:1; min-height:0; }
+  .demo-bottom{ flex:0 0 180px; display:flex; gap:10px; }
+  .panel-gas{ flex:1.2; min-width:0; }
+  .panel-met{ flex:1; min-width:0; padding:8px 12px; display:flex; flex-direction:column; justify-content:space-around; }
+
+  .svg-box{ flex:1; padding:4px; min-height:0; }
+  .svg-box svg{ width:100%; height:100%; display:block; }
+
+  .metric{ display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px dashed var(--ink-1); }
+  .metric:last-child{ border:none; }
+  .m-label{ font-size:12px; color:var(--ink-3); width:80px; }
+  .m-value{ font-size:15px; font-weight:600; font-family:monospace; }
+  .m-value.is-warn{ color:var(--warn); }
+  .m-value.is-bad{ color:var(--danger); }
+  .m-value.is-ok{ color:var(--jade-3); }
+  .badge{ display:inline-flex; align-items:center; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; }
+  .badge.ok{ color:var(--jade-3); background:var(--jade-1); }
+  .badge.warn{ color:var(--warn); background:var(--warn-1); }
+  .badge.bad{ color:var(--danger); background:var(--danger-1); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <span class="dot"></span>
+    <h1>钻时曲线地层划分 · 时序变点检测与多源融合</h1>
+  </div>
+
+  <div class="demo-layout">
+    <div class="panel-ctrl">
+      <div class="panel" style="flex:1">
+        <div class="panel-title">参数与操作</div>
+        <div class="ctrl-body">
+          <div class="field">
+            <div class="field-head"><span>工程参数波动强度</span><b id="v-int">0.6</b></div>
+            <input type="range" id="s-int" min="0" max="1" step="0.05" value="0.6">
+          </div>
+
+          <button class="btn btn-primary" id="btn-detect">AI 融合识别</button>
+
+          <div class="hint">
+            <b>AI 逻辑：</b>先用工程参数对钻时做归一化消除干扰，再在曲线上检测变点，最后融合气测证据筛选出最可靠的岩性界面。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-stage">
+      <div class="panel panel-main">
+        <div class="panel-title">钻时曲线与岩性界面（0–200 m）</div>
+        <div class="svg-box"><svg id="svg-main" viewBox="0 0 680 300" preserveAspectRatio="xMidYMid meet"></svg></div>
+      </div>
+      
+      <div class="demo-bottom">
+        <div class="panel panel-gas">
+          <div class="panel-title">气测证据（总烃）</div>
+          <div class="svg-box"><svg id="svg-gas" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid meet"></svg></div>
+        </div>
+        <div class="panel panel-met">
+          <div class="metric">
+            <div class="m-label">识别界面数</div>
+            <div class="m-value" id="m-count">0</div>
+          </div>
+          <div class="metric">
+            <div class="m-label">平均深度误差</div>
+            <div class="m-value" id="m-err">—</div>
+          </div>
+          <div class="metric">
+            <div class="m-label">融合置信度</div>
+            <div class="m-value" id="m-conf">—</div>
+          </div>
+          <div class="metric">
+            <div class="m-label">岩性一致率</div>
+            <div class="m-value" id="m-match">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DEPTH_MAX = 200;
+  var DEPTH_STEP = 0.5;
+  var N_POINTS = Math.floor(DEPTH_MAX / DEPTH_STEP) + 1;
+
+  // 真实岩性段定义
+  var LITHO_SEGS = [
+    { start: 0,   end: 50,  mean: 15, name: '泥岩' },
+    { start: 50,  end: 110, mean: 6,  name: '砂岩' },
+    { start: 110, end: 160, mean: 10, name: '粉砂岩' },
+    { start: 160, end: 200, mean: 14, name: '泥岩' }
+  ];
+  var TRUE_BOUNDS = [50, 110, 160];
+
+  var state = {
+    intensity: 0.6,
+    data: [],
+    detected: [],
+    scores: [],
+    hasDetected: false
+  };
+
+  var els = {};
+
+  function q(id) { return document.getElementById(id); }
+
+  /* 固定种子随机数 */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function getLitho(depth) {
+    for (var i = 0; i < LITHO_SEGS.length; i++) {
+      if (depth >= LITHO_SEGS[i].start && depth < LITHO_SEGS[i].end) {
+        return LITHO_SEGS[i];
+      }
+    }
+    return LITHO_SEGS[LITHO_SEGS.length - 1];
+  }
+
+  /* ============ 数据生成 ============ */
+  function generateData(intensity) {
+    var rnd = mulberry32(42);
+    var data = [];
+
+    for (var i = 0; i < N_POINTS; i++) {
+      var depth = i * DEPTH_STEP;
+      var seg = getLitho(depth);
+      var baseDt = seg.mean;
+
+      // 工程参数波动（强度越大波动越大）
+      var n1 = rnd() - 0.5, n2 = rnd() - 0.5, n3 = rnd() - 0.5;
+      var wob = 100 + (Math.sin(depth * 0.2) * 15 + n1 * 20) * intensity;
+      var rpm = 80  + (Math.cos(depth * 0.3) * 12 + n2 * 18) * intensity;
+      var qp  = 30  + (Math.sin(depth * 0.4) * 3  + n3 * 4)  * intensity;
+
+      // 原始钻时：受参数影响
+      var rawDt = baseDt * (100 / wob) * (80 / rpm) * (30 / qp);
+      rawDt *= 1 + (rnd() - 0.5) * 0.06; // 测量噪声
+
+      // 归一化：消除参数影响
+      var normDt = rawDt * (wob / 100) * (rpm / 80) * (qp / 30);
+
+      // 气测总烃：砂岩段略高，界面附近有小峰
+      var gas = 250 + Math.sin(depth * 0.08) * 80 + rnd() * 60;
+      if (seg.name === '砂岩') gas += 200;
+      for (var b = 0; b < TRUE_BOUNDS.length; b++) {
+        if (Math.abs(depth - TRUE_BOUNDS[b]) < 4) {
+          gas += 500 * (1 - Math.abs(depth - TRUE_BOUNDS[b]) / 4);
+        }
+      }
+
+      data.push({
+        depth: depth,
+        rawDt: rawDt,
+        normDt: normDt,
+        gas: gas,
+        wob: wob, rpm: rpm, q: qp,
+        litho: seg.name
+      });
+    }
+
+    return data;
+  }
+
+  /* ============ 变点检测 + 多源融合 ============ */
+  function detectBoundaries(data, win) {
+    var W = win || 20; // 20 个点 = 10 m
+
+    // 1. 钻时变点得分
+    var dtScores = [];
+    for (var i = W; i < data.length - W; i++) {
+      var ls = 0, rs = 0;
+      for (var j = i - W; j < i; j++) ls += data[j].normDt;
+      for (var j = i; j < i + W; j++) rs += data[j].normDt;
+      dtScores.push({
+        idx: i, depth: data[i].depth,
+        rawDiff: Math.abs(rs / W - ls / W)
+      });
+    }
+
+    // 2. 气测变点得分
+    var gasScores = [];
+    for (var i = W; i < data.length - W; i++) {
+      var ls = 0, rs = 0;
+      for (var j = i - W; j < i; j++) ls += data[j].gas;
+      for (var j = i; j < i + W; j++) rs += data[j].gas;
+      gasScores.push({
+        idx: i, depth: data[i].depth,
+        rawDiff: Math.abs(rs / W - ls / W)
+      });
+    }
+
+    // 3. 归一化并融合
+    var maxDt = 0, maxGas = 0;
+    for (var i = 0; i < dtScores.length; i++) {
+      if (dtScores[i].rawDiff > maxDt) maxDt = dtScores[i].rawDiff;
+      if (gasScores[i].rawDiff > maxGas) maxGas = gasScores[i].rawDiff;
+    }
+
+    var fused = [];
+    for (var i = 0; i < dtScores.length; i++) {
+      var dtN = maxDt > 0 ? dtScores[i].rawDiff / maxDt : 0;
+      var gasN = maxGas > 0 ? gasScores[i].rawDiff / maxGas : 0;
+      fused.push({
+        depth: dtScores[i].depth,
+        idx: dtScores[i].idx,
+        dtScore: dtN,
+        gasScore: gasN,
+        score: 0.65 * dtN + 0.35 * gasN
+      });
+    }
+
+    // 4. 非极大值抑制
+    var threshold = 0.35;
+    var minDist = 30; // 15 m
+
+    var candidates = fused.filter(function(s) { return s.score > threshold; });
+    candidates.sort(function(a, b) { return b.score - a.score; });
+
+    var selected = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var tooClose = false;
+      for (var j = 0; j < selected.length; j++) {
+        if (Math.abs(candidates[i].depth - selected[j].depth) < minDist) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (!tooClose) selected.push(candidates[i]);
+    }
+
+    selected.sort(function(a, b) { return a.depth - b.depth; });
+
+    return { fused: fused, selected: selected };
+  }
+
+  /* ============ 渲染主图 ============ */
+  function renderMain() {
+    var W = 680, H = 300;
+    var ML = 60, MR = 30, MT = 25, MB = 35;
+    var pw = W - ML - MR, ph = H - MT - MB;
+
+    function tx(d) { return ML + d / DEPTH_MAX * pw; }
+    function ty(v) { return MT + ph - Math.min(v, 22) / 22 * ph; }
+
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>');
+
+    // 网格
+    for (var gi = 0; gi <= 4; gi++) {
+      var gd = gi * 50;
+      p.push('<line x1="' + tx(gd) + '" y1="' + MT + '" x2="' + tx(gd) + '" y2="' + (MT + ph) + '" stroke="#eef1f3" stroke-width="1"/>');
+      p.push('<text x="' + tx(gd) + '" y="' + (MT + ph + 16) + '" text-anchor="middle" font-size="10" fill="#9aa8b0">' + gd + 'm</text>');
+    }
+    for (var gi = 0; gi <= 4; gi++) {
+      var gv = gi * 5;
+      p.push('<line x1="' + ML + '" y1="' + ty(gv) + '" x2="' + (ML + pw) + '" y2="' + ty(gv) + '" stroke="#eef1f3" stroke-width="1"/>');
+      p.push('<text x="' + (ML - 8) + '" y="' + (ty(gv) + 4) + '" text-anchor="end" font-size="10" fill="#9aa8b0">' + gv + '</text>');
+    }
+
+    // 岩性分段背景色
+    for (var i = 0; i < LITHO_SEGS.length; i++) {
+      var seg = LITHO_SEGS[i];
+      var fill = seg.name === '泥岩' ? 'rgba(229,211,179,0.15)' :
+                 seg.name === '砂岩' ? 'rgba(196,168,138,0.15)' :
+                 'rgba(212,160,23,0.10)';
+      p.push('<rect x="' + tx(seg.start) + '" y="' + MT + '" width="' + (tx(seg.end) - tx(seg.start)) + '" height="' + ph + '" fill="' + fill + '"/>');
+    }
+
+    // 原始钻时（灰色，波动大）
+    var rawPath = '';
+    for (var i = 0; i < state.data.length; i++) {
+      rawPath += (i === 0 ? 'M' : 'L') + tx(state.data[i].depth) + ',' + ty(state.data[i].rawDt);
+    }
+    p.push('<path d="' + rawPath + '" fill="none" stroke="#c0c8d0" stroke-width="1.2" opacity="0.7"/>');
+
+    // 归一化钻时（绿色，清晰）
+    var normPath = '';
+    for (var i = 0; i < state.data.length; i++) {
+      normPath += (i === 0 ? 'M' : 'L') + tx(state.data[i].depth) + ',' + ty(state.data[i].normDt);
+    }
+    p.push('<path d="' + normPath + '" fill="none" stroke="#2f8f7a" stroke-width="2" stroke-linejoin="round"/>');
+
+    // 真实界面（灰色虚线）
+    for (var i = 0; i < TRUE_BOUNDS.length; i++) {
+      var bd = TRUE_BOUNDS[i];
+      p.push('<line x1="' + tx(bd) + '" y1="' + MT + '" x2="' + tx(bd) + '" y2="' + (MT + ph) + '" stroke="#9aa8b0" stroke-width="1.2" stroke-dasharray="4 4"/>');
+      p.push('<text x="' + (tx(bd) - 4) + '" y="' + (MT + ph - 4) + '" font-size="9" fill="#9aa8b0" text-anchor="end">真实</text>');
+    }
+
+    // AI 识别界面（绿色虚线 + 三角形）
+    for (var i = 0; i < state.detected.length; i++) {
+      var b = state.detected[i];
+      p.push('<line x1="' + tx(b.depth) + '" y1="' + MT + '" x2="' + tx(b.depth) + '" y2="' + (MT + ph) + '" stroke="#2f8f7a" stroke-width="2" stroke-dasharray="6 4"/>');
+      p.push('<polygon points="' + tx(b.depth) + ',' + (MT - 4) + ' ' + (tx(b.depth) - 5) + ',' + (MT - 14) + ' ' + (tx(b.depth) + 5) + ',' + (MT - 14) + '" fill="#2f8f7a"/>');
+    }
+
+    // 岩性名称标注
+    for (var i = 0; i < LITHO_SEGS.length; i++) {
+      var seg = LITHO_SEGS[i];
+      var mid = (seg.start + seg.end) / 2;
+      p.push('<text x="' + tx(mid) + '" y="' + (MT + ph / 2 + 4) + '" text-anchor="middle" font-size="11" fill="#5b6b74" opacity="0.7">' + seg.name + '</text>');
+    }
+
+    // 图例
+    p.push('<rect x="' + (W - 200) + '" y="' + (MT + 4) + '" width="180" height="62" rx="4" fill="#fff" fill-opacity="0.92" stroke="#e2e8ea" stroke-width="1"/>');
+    p.push('<line x1="' + (W - 192) + '" y1="' + (MT + 16) + '" x2="' + (W - 170) + '" y2="' + (MT + 16) + '" stroke="#c0c8d0" stroke-width="1.5"/>');
+    p.push('<text x="' + (W - 164) + '" y="' + (MT + 20) + '" font-size="10" fill="#5b6b74">原始钻时</text>');
+    p.push('<line x1="' + (W - 192) + '" y1="' + (MT + 32) + '" x2="' + (W - 170) + '" y2="' + (MT + 32) + '" stroke="#2f8f7a" stroke-width="2"/>');
+    p.push('<text x="' + (W - 164) + '" y="' + (MT + 36) + '" font-size="10" fill="#1f7261">归一化钻时</text>');
+    p.push('<line x1="' + (W - 192) + '" y1="' + (MT + 48) + '" x2="' + (W - 170) + '" y2="' + (MT + 48) + '" stroke="#2f8f7a" stroke-width="2" stroke-dasharray="4 3"/>');
+    p.push('<text x="' + (W - 164) + '" y="' + (MT + 52) + '" font-size="10" fill="#1f7261">AI 识别界面</text>');
+
+    // 轴标题
+    p.push('<text x="' + (ML + pw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10.5" fill="#5b6b74">深度 (m)</text>');
+    p.push('<text x="14" y="' + (MT + ph / 2) + '" text-anchor="middle" font-size="10.5" fill="#5b6b74" transform="rotate(-90 14 ' + (MT + ph / 2) + ')">钻时 (min/m)</text>');
+
+    return p.join('');
+  }
+
+  /* ============ 渲染气测图 ============ */
+  function renderGas() {
+    var W = 300, H = 150;
+    var ML = 35, MR = 15, MT = 20, MB = 30;
+    var pw = W - ML - MR, ph = H - MT - MB;
+
+    function tx(d) { return ML + d / DEPTH_MAX * pw; }
+    function ty(v) { return MT + ph - Math.min(v, 1500) / 1500 * ph; }
+
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>');
+
+    // 网格
+    for (var gi = 0; gi <= 3; gi++) {
+      var gv = gi * 500;
+      p.push('<line x1="' + ML + '" y1="' + ty(gv) + '" x2="' + (ML + pw) + '" y2="' + ty(gv) + '" stroke="#eef1f3" stroke-width="1"/>');
+      p.push('<text x="' + (ML - 5) + '" y="' + (ty(gv) + 3) + '" text-anchor="end" font-size="9" fill="#9aa8b0">' + gv + '</text>');
+    }
+
+    // 曲线
+    var d = '';
+    for (var i = 0; i < state.data.length; i++) {
+      d += (i === 0 ? 'M' : 'L') + tx(state.data[i].depth) + ',' + ty(state.data[i].gas);
+    }
+    p.push('<path d="' + d + '" fill="none" stroke="#b4653f" stroke-width="1.5" stroke-linejoin="round"/>');
+
+    // 界面标记
+    for (var i = 0; i < TRUE_BOUNDS.length; i++) {
+      var bd = TRUE_BOUNDS[i];
+      p.push('<line x1="' + tx(bd) + '" y1="' + MT + '" x2="' + tx(bd) + '" y2="' + (MT + ph) + '" stroke="#d4a017" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>');
+    }
+
+    p.push('<text x="' + (ML + pw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="#5b6b74">深度 (m)</text>');
+    p.push('<text x="12" y="' + (MT + ph / 2) + '" text-anchor="middle" font-size="10" fill="#5b6b74" transform="rotate(-90 12 ' + (MT + ph / 2) + ')">总烃 (ppm)</text>');
+
+    return p.join('');
+  }
+
+  /* ============ 更新指标面板 ============ */
+  function renderMetrics() {
+    if (!state.hasDetected) {
+      els.mCount.textContent = '—';
+      els.mErr.textContent = '—';
+      els.mConf.textContent = '—';
+      els.mMatch.textContent = '—';
+      return;
+    }
+
+    var sel = state.detected;
+    var count = sel.length;
+
+    // 平均深度误差
+    var totalErr = 0, matchCount = 0;
+    for (var i = 0; i < sel.length; i++) {
+      var minDist = Infinity;
+      for (var j = 0; j < TRUE_BOUNDS.length; j++) {
+        var dist = Math.abs(sel[i].depth - TRUE_BOUNDS[j]);
+        if (dist < minDist) minDist = dist;
+      }
+      totalErr += minDist;
+      if (minDist <= 5) matchCount++;
+    }
+    var avgErr = count > 0 ? totalErr / count : 0;
+
+    // 平均置信度
+    var totalScore = 0;
+    for (var i = 0; i < sel.length; i++) totalScore += sel[i].score;
+    var avgScore = count > 0 ? totalScore / count : 0;
+
+    // 匹配率
+    var matchRate = count > 0 ? matchCount / count : 0;
+
+    els.mCount.textContent = count;
+    els.mCount.className = 'm-value ' + (Math.abs(count - 3) <= 1 ? 'is-ok' : 'is-warn');
+
+    els.mErr.textContent = avgErr.toFixed(1) + ' m';
+    els.mErr.className = 'm-value ' + (avgErr <= 5 ? 'is-ok' : 'is-warn');
+
+    els.mConf.textContent = (avgScore * 100).toFixed(0) + '%';
+    els.mConf.className = 'm-value ' + (avgScore >= 0.5 ? 'is-ok' : 'is-warn');
+
+    els.mMatch.textContent = (matchRate * 100).toFixed(0) + '%';
+    els.mMatch.className = 'm-value ' + (matchRate >= 0.7 ? 'is-ok' : 'is-warn');
+  }
+
+  /* ============ 更新 UI ============ */
+  function updateAll() {
+    els.svgMain.innerHTML = renderMain();
+    els.svgGas.innerHTML = renderGas();
+    renderMetrics();
+  }
+
+  function regenerate() {
+    state.data = generateData(state.intensity);
+    state.hasDetected = false;
+    state.detected = [];
+    updateAll();
+  }
+
+  function runDetect() {
+    if (els.btnDetect.disabled) return;
+    els.btnDetect.disabled = true;
+    els.btnDetect.textContent = '识别中…';
+
+    setTimeout(function() {
+      var res = detectBoundaries(state.data, 20);
+      state.detected = res.selected;
+      state.scores = res.fused;
+      state.hasDetected = true;
+
+      updateAll();
+
+      els.btnDetect.disabled = false;
+      els.btnDetect.textContent = 'AI 融合识别';
+    }, 300);
+  }
+
+  /* ============ 初始化 ============ */
+  function init() {
+    els.svgMain = q('svg-main');
+    els.svgGas = q('svg-gas');
+    els.sInt = q('s-int');
+    els.vInt = q('v-int');
+    els.btnDetect = q('btn-detect');
+    els.mCount = q('m-count');
+    els.mErr = q('m-err');
+    els.mConf = q('m-conf');
+    els.mMatch = q('m-match');
+
+    els.sInt.addEventListener('input', function() {
+      state.intensity = parseFloat(this.value);
+      els.vInt.textContent = state.intensity.toFixed(2);
+      regenerate();
+    });
+
+    els.btnDetect.addEventListener('click', runDetect);
+
+    regenerate();
+  }
+
+  // 生命周期钩子
+  window.__CASE_MOUNT__ = function () {
+    if (!els.svgMain || !els.svgMain.innerHTML) init();
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>

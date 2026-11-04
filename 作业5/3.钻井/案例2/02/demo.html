@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>井下复杂事故前兆预警 · 示范</title>
+<style>
+  :root{
+    --jade:#2f7d6b; --jade-d:#235f51; --jade-l:#e6f1ec;
+    --clay:#b26a39; --clay-l:#f8ecdf;
+    --ink:#242b2e; --ink-2:#4d565b; --ink-3:#79828a; --ink-4:#9ba3a9;
+    --line:#e9e4d8; --line-2:#ddd7c8; --line-3:#c9c2b0;
+    --card:#ffffff; --soft:#fdfcf9; --paper:#fbfaf6;
+    --ok:#3f8560; --warn:#a97a1c; --bad:#b05a51;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:16px 18px 22px; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .kick{ font-family:var(--mono); font-size:9px; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--jade-d); }
+  h1{ font-size:17px; font-weight:650; margin:7px 0 0; letter-spacing:-.01em; }
+  .desc{ margin:7px 0 0; font-size:12px; color:var(--ink-3);
+    line-height:1.7; max-width:76ch; }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) 232px;
+    gap:12px; margin-top:14px; align-items:start; }
+  .stage{ background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:9px 10px 8px; min-width:0; }
+  .stage svg{ display:block; width:100%; height:auto; }
+  .legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:7px;
+    font-size:9.6px; color:var(--ink-4); }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend i{ width:12px; height:2.5px; border-radius:1px; display:block; }
+  .legend i.dash{ height:0; border-top:1px dashed currentColor; background:none !important; }
+
+  .side{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .metric{ background:var(--card); padding:8px 9px; }
+  .metric .l{ font-family:var(--mono); font-size:7.6px; letter-spacing:.07em;
+    color:var(--ink-4); white-space:nowrap; }
+  .metric .v{ font-family:var(--mono); font-size:15px; margin-top:4px;
+    line-height:1; color:var(--ink); }
+  .metric .v small{ font-size:8px; color:var(--ink-4); margin-left:2px; }
+  .metric.good .v{ color:var(--ok); }
+  .metric.warn .v{ color:var(--warn); }
+  .metric.bad .v{ color:var(--bad); }
+
+  .verdict{ font-size:11.2px; line-height:1.7; color:var(--ink-2);
+    border-left:2.5px solid var(--line-2); padding-left:9px; }
+  .verdict b{ color:var(--ink); }
+  .verdict.ok{ border-color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); }
+
+  .card{ border:1px solid var(--line); border-radius:8px;
+    background:var(--soft); padding:9px 10px; }
+  .card h5{ margin:0 0 6px; font-family:var(--mono); font-size:7.6px;
+    letter-spacing:.1em; color:var(--ink-4); font-weight:400; text-transform:uppercase; }
+  table{ width:100%; border-collapse:collapse; font-size:9.8px; }
+  td{ padding:3px 0; border-bottom:1px solid var(--line); color:var(--ink-3); }
+  tr:last-child td{ border-bottom:0; }
+  td:last-child{ text-align:right; font-family:var(--mono); color:var(--ink-2); white-space:nowrap; }
+  td.ok{ color:var(--ok); } td.bad{ color:var(--bad); }
+
+  .ctrls{ display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+    margin-top:11px; padding:11px 14px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; }
+  .ctl{ display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--ink-2); }
+  .ctl label{ font-family:var(--mono); font-size:9px; letter-spacing:.06em;
+    color:var(--ink-3); white-space:nowrap; }
+  .ctl input[type=range]{ -webkit-appearance:none; appearance:none;
+    width:112px; height:4px; border-radius:2px; background:var(--line-2);
+    outline:none; cursor:pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid var(--card); box-shadow:0 0 0 1px var(--jade); cursor:grab; }
+  .ctl input[type=range]::-moz-range-thumb{ width:13px; height:13px;
+    border-radius:50%; background:var(--jade); border:2.5px solid var(--card); cursor:grab; }
+  .ctl .val{ font-family:var(--mono); font-size:10.5px; color:var(--jade-d);
+    min-width:40px; text-align:right; }
+
+  button{ font-family:inherit; font-size:12.5px; font-weight:600;
+    padding:8px 15px; border-radius:7px; border:1px solid var(--jade);
+    background:var(--jade); color:#fff; cursor:pointer;
+    transition:background .15s, box-shadow .15s; }
+  button:hover{ background:var(--jade-d); box-shadow:0 4px 12px -5px rgba(47,125,107,.5); }
+  button:active{ transform:translateY(1px); }
+
+  @media (max-width:760px){
+    body{ padding:13px 13px 18px; }
+    .grid{ grid-template-columns:1fr; }
+    .ctrls{ gap:11px; }
+    .ctl{ width:100%; justify-content:space-between; }
+    .ctl input[type=range]{ flex:1; width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="kick">INTERACTIVE · 残差预警</div>
+<h1>报警能比人早多少，代价是多少</h1>
+<p class="desc">
+  三条通道各自用滚动分位数做自适应基线，偏离量标准化成 z 分数后加权。
+  绿线是综合 z 触发点，红虚线是单通道固定阈值。<b>注意接单根那几段</b>——
+  那是固定阈值的主要误报来源，而自适应基线会先按工况把它们排除掉。
+</p>
+
+<div class="grid">
+  <div class="stage">
+    <svg id="chart" viewBox="0 0 620 258" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="三通道预警曲线"></svg>
+    <div class="legend">
+      <span><i style="background:#4d565b"></i>实测</span>
+      <span><i class="dash" style="color:#2f7d6b"></i>自适应基线 ± 带</span>
+      <span><i style="background:#2f7d6b"></i>AI 报警</span>
+      <span><i class="dash" style="color:#b05a51"></i>固定阈值报警</span>
+      <span><i style="background:#b26a39"></i>接单根（非钻进工况）</span>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="metrics" id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h5>报警时刻的通道贡献</h5>
+      <div id="contrib"></div>
+    </div>
+    <div class="card">
+      <h5>对照</h5>
+      <table id="tbl"></table>
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <div class="ctl">
+    <label>噪声</label>
+    <input type="range" id="s-noise" min="30" max="180" step="5" value="100">
+    <span class="val" id="v-noise">100%</span>
+  </div>
+  <div class="ctl">
+    <label>前兆强度</label>
+    <input type="range" id="s-pre" min="30" max="150" step="5" value="100">
+    <span class="val" id="v-pre">100%</span>
+  </div>
+  <button id="run" type="button">换一段数据</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     一、参数与数据构造
+     ========================================================= */
+  var N = 240;                 /* 采样点数，1 点 = 1 分钟 */
+  var T0 = 100, RAMP = 80;     /* 前兆从 T0 开始，80 点内线性上升 */
+  var BURSTS = [[30, 4], [88, 5], [176, 4]];   /* 接单根窗口 [起点, 长度] */
+  var ZTH = 3.2, COOL = 15;    /* 综合 z 阈值 / 冷却窗口 */
+  var EYE = T0 + RAMP * 0.70;  /* "人工肉眼可发现"：幅度达 70% */
+
+  var CH = [
+    { n: '扭矩',     base: 12, sd: 1.00, delta:  3.8, burst:  7.0 },
+    { n: '立管压力', base: 18, sd: 0.90, delta:  6.0, burst: -3.5 },
+    { n: '返出流量', base: 30, sd: 0.80, delta: -9.0, burst: -27.0 }
+  ];
+  var WGT = [0.30, 0.30, 0.40];
+
+  function seedFn(a) {
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function gauss(rnd) {
+    var u = 0, v = 0;
+    while (u === 0) u = rnd();
+    while (v === 0) v = rnd();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function isBurst(i) {
+    for (var k = 0; k < BURSTS.length; k++) {
+      if (i >= BURSTS[k][0] && i < BURSTS[k][0] + BURSTS[k][1]) return true;
+    }
+    return false;
+  }
+
+  /* 噪声序列按种子固定，拖滑杆时形态连续可读 */
+  function noiseBank(seed) {
+    var rnd = seedFn(seed), bank = [];
+    for (var c = 0; c < 3; c++) {
+      var arr = [];
+      for (var i = 0; i < N; i++) arr.push(gauss(rnd));
+      bank.push(arr);
+    }
+    return bank;
+  }
+
+  var BANK = noiseBank(7);
+
+  function build(st) {
+    var f = 0.35 + st.noise / 100 * 1.4;
+    var p = st.pre / 100;
+    var out = [], c, i;
+
+    for (c = 0; c < 3; c++) {
+      var arr = [];
+      for (i = 0; i < N; i++) {
+        var ramp = i <= T0 ? 0 : Math.min(1, (i - T0) / RAMP);
+        var v = CH[c].base + CH[c].delta * p * ramp + CH[c].sd * f * BANK[c][i];
+        if (isBurst(i)) v += CH[c].burst;
+        arr.push(v);
+      }
+      out.push(arr);
+    }
+    return out;
+  }
+
+  /* =========================================================
+     二、分析：学习期基线 → EWMA 缓漂 → 标准化残差
+     ========================================================= */
+  function analyse(vals) {
+    var c, i;
+
+    /* 学习期：前 80 点里的钻进段 */
+    var mu = [], sd = [];
+    for (c = 0; c < 3; c++) {
+      var s = 0, n = 0;
+      for (i = 0; i < 80; i++) {
+        if (isBurst(i)) continue;
+        s += vals[c][i]; n++;
+      }
+      mu.push(s / n);
+
+      s = 0;
+      for (i = 0; i < 80; i++) {
+        if (isBurst(i)) continue;
+        var d = vals[c][i] - mu[c];
+        s += d * d;
+      }
+      sd.push(Math.sqrt(s / Math.max(1, n - 1)));
+    }
+
+    /* 慢速 EWMA 基线 + 逐点 z */
+    var base = [[], [], []], z = [[], [], []];
+    for (c = 0; c < 3; c++) {
+      var b = mu[c];
+      for (i = 0; i < N; i++) {
+        if (!isBurst(i)) b = b * 0.995 + vals[c][i] * 0.005;
+        base[c].push(b);
+        z[c].push(Math.abs(vals[c][i] - b) / Math.max(1e-6, sd[c]));
+      }
+    }
+
+    /* 综合 z */
+    var comb = [];
+    for (i = 0; i < N; i++) {
+      comb.push(WGT[0] * z[0][i] + WGT[1] * z[1][i] + WGT[2] * z[2][i]);
+    }
+
+    /* AI 报警：连续两点超阈 + 冷却 + 排除非钻进 */
+    var alarms = [], last = -999, prev = false;
+    for (i = 0; i < N; i++) {
+      if (isBurst(i)) { prev = false; continue; }
+      var high = comb[i] > ZTH;
+      if (high && prev && (i - last) > COOL) { alarms.push(i); last = i; }
+      prev = high;
+    }
+
+    /* 固定阈值：单通道（扭矩）均值 + 2σ，不排除工况 */
+    var THf = mu[0] + 2.0 * sd[0];
+    var fixed = [];
+    for (i = 0; i < N; i++) {
+      if (vals[0][i] > THf) fixed.push(i);
+    }
+
+    return {
+      mu: mu, sd: sd, base: base, z: z, comb: comb,
+      alarms: alarms, fixed: fixed, THf: THf
+    };
+  }
+
+  /* =========================================================
+     三、绘制
+     ========================================================= */
+  var SW = 620, SH = 258;
+  var L = 46, R = 16;
+  var PT = 24, PH = 54, PG = 14;
+  var STRIP_Y = PT + 3 * (PH + PG) - PG + 4;
+
+  function panelTop(r) { return PT + r * (PH + PG); }
+
+  function drawChart(vals, res) {
+    var s = '', c, i;
+    s += '<rect width="' + SW + '" height="' + SH + '" fill="#ffffff"/>';
+
+    for (c = 0; c < 3; c++) {
+      var top = panelTop(c);
+      var bot = top + PH;
+      var arr = vals[c];
+      var lo = Math.min.apply(null, arr);
+      var hi = Math.max.apply(null, arr);
+      var pad = (hi - lo) * 0.14 + 1e-6;
+      lo -= pad; hi += pad;
+
+      function X(k) { return L + k / (N - 1) * (SW - L - R); }
+      function Y(v) { return bot - (v - lo) / (hi - lo) * PH; }
+
+      /* 通道名 */
+      s += '<text x="4" y="' + (top + 10) + '" font-size="8.2" fill="#79828a" ' +
+        'font-weight="600">' + CH[c].n + '</text>';
+
+      /* 接单根底纹 */
+      for (i = 0; i < BURSTS.length; i++) {
+        var s0 = BURSTS[i][0], s1 = s0 + BURSTS[i][1];
+        s += '<rect x="' + X(s0).toFixed(1) + '" y="' + top +
+          '" width="' + Math.max(2, X(s1) - X(s0)).toFixed(1) +
+          '" height="' + PH + '" fill="#b26a39" fill-opacity=".12"/>';
+      }
+
+      /* 基线带 */
+      var band = [];
+      for (i = 0; i < N; i++) {
+        var d = res.sd[c];
+        band.push([X(i), Y(res.base[c][i] + d), Y(res.base[c][i] - d)]);
+      }
+      var up = '', dn = '';
+      for (i = 0; i < N; i++) {
+        up += (i ? 'L' : 'M') + band[i][0].toFixed(1) + ' ' + band[i][1].toFixed(1);
+      }
+      for (i = N - 1; i >= 0; i--) {
+        dn += 'L' + band[i][0].toFixed(1) + ' ' + band[i][2].toFixed(1);
+      }
+      s += '<path d="' + up + dn + 'Z" fill="#2f7d6b" fill-opacity=".10"/>';
+      s += '<path d="' + up + '" fill="none" stroke="#2f7d6b" stroke-width="1" ' +
+        'stroke-dasharray="4 3" stroke-opacity=".55"/>';
+      s += '<path d="' + dn + '" fill="none" stroke="#2f7d6b" stroke-width="1" ' +
+        'stroke-dasharray="4 3" stroke-opacity=".55"/>';
+
+      /* 曲线 */
+      var pts = '';
+      for (i = 0; i < N; i++) {
+        pts += (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(arr[i]).toFixed(1);
+      }
+      s += '<path d="' + pts + '" fill="none" stroke="#4d565b" stroke-width="1.25" ' +
+        'stroke-linejoin="round"/>';
+
+      /* AI 报警线 */
+      for (i = 0; i < res.alarms.length; i++) {
+        s += '<line x1="' + X(res.alarms[i]).toFixed(1) + '" y1="' + top +
+          '" x2="' + X(res.alarms[i]).toFixed(1) + '" y2="' + bot +
+          '" stroke="#2f7d6b" stroke-width="1.5" stroke-dasharray="3 2"/>';
+      }
+
+      /* 固定阈值线 */
+      if (c === 0) {
+        s += '<line x1="' + L + '" y1="' + Y(res.THf).toFixed(1) +
+          '" x2="' + (SW - R) + '" y2="' + Y(res.THf).toFixed(1) +
+          '" stroke="#b05a51" stroke-width="1.1" stroke-dasharray="5 3" ' +
+          'stroke-opacity=".75"/>';
+        s += '<text x="' + (SW - R) + '" y="' + (Y(res.THf) - 4).toFixed(1) +
+          '" font-size="7.6" fill="#b05a51" text-anchor="end" ' +
+          'font-family="ui-monospace,monospace">固定阈值 ' + res.THf.toFixed(1) + '</text>';
+      }
+
+      s += '<line x1="' + L + '" y1="' + bot + '" x2="' + (SW - R) + '" y2="' + bot +
+        '" stroke="#e9e4d8"/>';
+    }
+
+    /* 工况条 */
+    var x0 = L, totalW = SW - L - R;
+    s += '<text x="' + L + '" y="' + (STRIP_Y - 3) + '" font-size="7.4" ' +
+      'fill="#9ba3a9" font-family="ui-monospace,monospace">工况</text>';
+
+    var segs = [], cur = 0, state = isBurst(0);
+    for (i = 1; i <= N; i++) {
+      var st = i < N ? isBurst(i) : !state;
+      if (st !== state || i === N) {
+        segs.push([cur, i, state]);
+        cur = i; state = st;
+      }
+    }
+    for (i = 0; i < segs.length; i++) {
+      var a = segs[i][0], b = segs[i][1], isB = segs[i][2];
+      var wpx = Math.max(1.5, (b - a) / (N - 1) * totalW);
+      s += '<rect x="' + (L + a / (N - 1) * totalW).toFixed(1) + '" y="' + STRIP_Y +
+        '" width="' + wpx.toFixed(1) + '" height="11" rx="1.5" fill="' +
+        (isB ? '#b26a39' : '#2f7d6b') + '" fill-opacity="' + (isB ? '.85' : '.6') + '"/>';
+    }
+
+    /* 时间轴 */
+    [0, 60, 120, 180, 240].forEach(function (t) {
+      var tx = L + t / (N - 1) * totalW;
+      if (t > 0 && t < 240) {
+        s += '<line x1="' + tx.toFixed(1) + '" y1="' + PT +
+          '" x2="' + tx.toFixed(1) + '" y2="' + (STRIP_Y + 11) +
+          '" stroke="#e9e4d8" stroke-dasharray="2 4"/>';
+      }
+      s += '<text x="' + tx.toFixed(1) + '" y="' + (STRIP_Y + 25) +
+        '" font-size="7.4" fill="#9ba3a9" text-anchor="middle" ' +
+        'font-family="ui-monospace,monospace">' + t + '</text>';
+    });
+    s += '<text x="' + (SW - R) + '" y="' + (STRIP_Y + 25) +
+      '" font-size="7.4" fill="#9ba3a9" text-anchor="end" ' +
+      'font-family="ui-monospace,monospace">分钟</text>';
+
+    /* 人工可发现线 */
+    var ex = L + EYE / (N - 1) * totalW;
+    s += '<line x1="' + ex.toFixed(1) + '" y1="' + (PT - 8) +
+      '" x2="' + ex.toFixed(1) + '" y2="' + STRIP_Y +
+      '" stroke="#a97a1c" stroke-width="1" stroke-dasharray="4 4" stroke-opacity=".8"/>';
+    s += '<text x="' + ex.toFixed(1) + '" y="' + (PT - 12) +
+      '" font-size="7.6" fill="#a97a1c" text-anchor="middle" ' +
+      'font-weight="600">人工可发现</text>';
+
+    document.getElementById('chart').innerHTML = s;
+  }
+
+  /* =========================================================
+     四、侧栏
+     ========================================================= */
+  function drawSide(vals, res) {
+    var aiFirst = res.alarms.length ? res.alarms[0] : -1;
+    var fxFirst = res.fixed.length ? res.fixed[0] : -1;
+
+    var aiLead = aiFirst >= 0 ? Math.round(EYE - aiFirst) : null;
+    var fxLead = fxFirst >= 0 ? Math.round(EYE - fxFirst) : null;
+
+    /* 误报：早于真事件起点（T0）的报警 */
+    var aiFalse = res.alarms.filter(function (i) { return i < T0; }).length;
+    var fxFalse = res.fixed.filter(function (i) { return i < T0; }).length;
+
+    var aiCls = aiLead === null ? 'bad' : aiLead >= 12 ? 'good' : aiLead > 0 ? 'warn' : 'bad';
+    var fxCls = fxFalse > 0 ? 'bad' : 'good';
+
+    document.getElementById('metrics').innerHTML =
+      '<div class="metric ' + aiCls + '"><div class="l">AI 提前</div>' +
+        '<div class="v">' + (aiLead === null ? '—' : aiLead) + '<small>min</small></div></div>' +
+      '<div class="metric"><div class="l">固定阈值提前</div>' +
+        '<div class="v">' + (fxLead === null ? '—' : fxLead) + '<small>min</small></div></div>' +
+      '<div class="metric ' + (aiFalse ? 'warn' : 'good') + '"><div class="l">AI 误报</div>' +
+        '<div class="v">' + aiFalse + '<small>次</small></div></div>' +
+      '<div class="metric ' + fxCls + '"><div class="l">固定阈值误报</div>' +
+        '<div class="v">' + fxFalse + '<small>次</small></div></div>';
+
+    /* 判词 */
+    var vEl = document.getElementById('verdict'), html, cls;
+
+    if (aiFirst < 0) {
+      cls = 'bad';
+      html = '这段数据里 <b>AI 没报警</b>：前兆太弱，综合 z 始终没超过 ' + ZTH +
+        '。<b>把"前兆强度"调高</b>，或把噪声调低。';
+    } else if (aiFalse > 0) {
+      cls = 'warn';
+      html = 'AI 报了 <b>' + aiFalse + ' 次误报</b>。噪声太大时，综合 z 会被随机波动推过阈值——' +
+        '<b>这正是要加冷却窗口与"连续两点"约束的原因</b>。';
+    } else {
+      cls = 'ok';
+      html = 'AI 在 <b>' + aiFirst + ' 分钟</b>报出，比"人工可发现"早 <b>' +
+        aiLead + ' 分钟</b>，且<b>零误报</b>。';
+      if (fxFalse > 0) {
+        html += ' 同期固定阈值报了 <b>' + fxFalse + ' 次误报</b>' +
+          '（全部落在接单根段）' +
+          (fxLead !== null && fxLead < aiLead ? '，虽然它更早，' : '，');
+        html += fxLead !== null && fxLead < aiLead
+          ? '但那几次都是假的。'
+          : '而它真正的第一次触发在 ' + fxFirst + ' 分钟。';
+      }
+    }
+    vEl.className = 'verdict ' + cls;
+    vEl.innerHTML = html;
+
+    /* 报警时刻的通道贡献 */
+    var at = aiFirst >= 0 ? aiFirst : EYE;
+    var cw = [res.z[0][at] * WGT[0], res.z[1][at] * WGT[1], res.z[2][at] * WGT[2]];
+    var tot = cw[0] + cw[1] + cw[2] || 1;
+
+    var bars = '', k;
+    var maxPct = 0;
+    for (k = 0; k < 3; k++) maxPct = Math.max(maxPct, cw[k] / tot * 100);
+
+    for (k = 0; k < 3; k++) {
+      var pct = Math.round(cw[k] / tot * 100);
+      var col = pct >= 35 ? '#b05a51' : pct >= 25 ? '#b26a39' : '#2f7d6b';
+      bars += '<div style="display:flex;align-items:center;gap:6px;margin:3px 0">' +
+        '<span style="font-size:9.6px;color:#4d565b;width:52px;flex:0 0 52px">' +
+        CH[k].n + '</span>' +
+        '<span style="flex:1;height:7px;background:#e9e4d8;border-radius:2px;overflow:hidden">' +
+        '<i style="display:block;height:100%;width:' + pct + '%;background:' + col + '"></i></span>' +
+        '<span style="font-family:ui-monospace,monospace;font-size:9.4px;color:#79828a;' +
+        'width:28px;text-align:right">' + pct + '%</span></div>';
+    }
+    bars += '<p style="font-size:9.6px;color:#9ba3a9;margin:6px 0 0;line-height:1.6">' +
+      '报警时刻（第 ' + at + ' 分钟）的通道分解。' +
+      '<b style="color:#4d565b">说出"谁在报警"，司钻才会信第二次。</b></p>';
+    document.getElementById('contrib').innerHTML = bars;
+
+    document.getElementById('tbl').innerHTML =
+      '<tr><td>AI 首次报警</td><td>' + (aiFirst >= 0 ? aiFirst + ' min' : '未触发') + '</td></tr>' +
+      '<tr><td>AI 报警总数</td><td>' + res.alarms.length + '</td></tr>' +
+      '<tr><td>固定阈值首次</td><td>' + (fxFirst >= 0 ? fxFirst + ' min' : '未触发') + '</td></tr>' +
+      '<tr><td>固定阈值总数</td><td class="' + (fxFalse ? 'bad' : '') + '">' +
+        res.fixed.length + '</td></tr>' +
+      '<tr><td>接单根段</td><td>' + BURSTS.length + ' 段</td></tr>';
+  }
+
+  /* =========================================================
+     五、主循环
+     ========================================================= */
+  var sNoise = document.getElementById('s-noise');
+  var sPre = document.getElementById('s-pre');
+  var vNoise = document.getElementById('v-noise');
+  var vPre = document.getElementById('v-pre');
+  var state = { noise: 100, pre: 100, seed: 7 };
+
+  function paint() {
+    state.noise = Number(sNoise.value);
+    state.pre = Number(sPre.value);
+    vNoise.textContent = state.noise + '%';
+    vPre.textContent = state.pre + '%';
+
+    var vals = build(state);
+    var res = analyse(vals);
+    drawChart(vals, res);
+    drawSide(vals, res);
+  }
+
+  sNoise.addEventListener('input', paint);
+  sPre.addEventListener('input', paint);
+
+  document.getElementById('run').addEventListener('click', function () {
+    state.seed = Math.floor(Math.random() * 1e6) + 1;
+    BANK = noiseBank(state.seed);
+    paint();
+  });
+
+  paint();
+
+})();
+</script>
+
+</body>
+</html>

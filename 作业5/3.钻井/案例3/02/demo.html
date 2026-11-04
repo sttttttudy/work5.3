@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>井眼轨迹智能控制 · 示范</title>
+<style>
+  :root{
+    --jade:#2f7d6b; --jade-d:#235f51; --jade-l:#e6f1ec;
+    --clay:#b26a39; --clay-l:#f8ecdf;
+    --ink:#242b2e; --ink-2:#4d565b; --ink-3:#79828a; --ink-4:#9ba3a9;
+    --line:#e9e4d8; --line-2:#ddd7c8; --line-3:#c9c2b0;
+    --card:#ffffff; --soft:#fdfcf9; --paper:#fbfaf6;
+    --ok:#3f8560; --warn:#a97a1c; --bad:#b05a51;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:16px 18px 22px; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .kick{ font-family:var(--mono); font-size:9px; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--jade-d); }
+  h1{ font-size:17px; font-weight:650; margin:7px 0 0; letter-spacing:-.01em; }
+  .desc{ margin:7px 0 0; font-size:12px; color:var(--ink-3);
+    line-height:1.7; max-width:78ch; }
+  .desc b{ color:var(--ink-2); }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) 226px;
+    gap:12px; margin-top:14px; align-items:start; }
+  .stage{ background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:9px 10px 8px; min-width:0; }
+  .stage svg{ display:block; width:100%; height:auto; }
+  .stage + .stage{ margin-top:0; }
+  .legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:6px;
+    font-size:9.6px; color:var(--ink-4); }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend i{ width:14px; height:2.5px; border-radius:1px; display:block; }
+  .legend i.dash{ height:0; border-top:1px dashed currentColor; background:none !important; }
+  .cap{ font-size:10px; color:var(--ink-4); margin-top:5px; line-height:1.6; }
+
+  .side{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .metric{ background:var(--card); padding:8px 9px; }
+  .metric .l{ font-family:var(--mono); font-size:7.6px; letter-spacing:.07em;
+    color:var(--ink-4); white-space:nowrap; }
+  .metric .v{ font-family:var(--mono); font-size:15px; margin-top:4px;
+    line-height:1; color:var(--ink); }
+  .metric .v small{ font-size:8px; color:var(--ink-4); margin-left:2px; }
+  .metric.good .v{ color:var(--ok); }
+  .metric.warn .v{ color:var(--warn); }
+  .metric.bad .v{ color:var(--bad); }
+
+  .verdict{ font-size:11.2px; line-height:1.7; color:var(--ink-2);
+    border-left:2.5px solid var(--line-2); padding-left:9px; }
+  .verdict b{ color:var(--ink); }
+  .verdict.ok{ border-color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); }
+
+  .card{ border:1px solid var(--line); border-radius:8px;
+    background:var(--soft); padding:9px 10px; }
+  .card h5{ margin:0 0 6px; font-family:var(--mono); font-size:7.6px;
+    letter-spacing:.1em; color:var(--ink-4); font-weight:400; text-transform:uppercase; }
+  table{ width:100%; border-collapse:collapse; font-size:9.8px; }
+  td{ padding:3px 0; border-bottom:1px solid var(--line); color:var(--ink-3); }
+  tr:last-child td{ border-bottom:0; }
+  td:last-child{ text-align:right; font-family:var(--mono); color:var(--ink-2); white-space:nowrap; }
+  td.ok{ color:var(--ok); } td.bad{ color:var(--bad); }
+
+  .ctrls{ display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+    margin-top:11px; padding:11px 14px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; }
+  .ctl{ display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--ink-2); }
+  .ctl label{ font-family:var(--mono); font-size:9px; letter-spacing:.06em;
+    color:var(--ink-3); white-space:nowrap; }
+  .ctl input[type=range]{ -webkit-appearance:none; appearance:none;
+    width:118px; height:4px; border-radius:2px; background:var(--line-2);
+    outline:none; cursor:pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid var(--card); box-shadow:0 0 0 1px var(--jade); cursor:grab; }
+  .ctl input[type=range]::-moz-range-thumb{ width:13px; height:13px;
+    border-radius:50%; background:var(--jade); border:2.5px solid var(--card); cursor:grab; }
+  .ctl .val{ font-family:var(--mono); font-size:10.5px; color:var(--jade-d);
+    min-width:46px; text-align:right; }
+
+  @media (max-width:780px){
+    body{ padding:13px 13px 18px; }
+    .grid{ grid-template-columns:1fr; }
+    .ctrls{ gap:11px; }
+    .ctl{ width:100%; justify-content:space-between; }
+    .ctl input[type=range]{ flex:1; width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="kick">INTERACTIVE · 滚动优化</div>
+<h1>一次算到底，还是每段重算</h1>
+<p class="desc">
+  地层响应比 = 实际造斜率 ÷ 设计造斜率。拖这个滑块，看两条轨迹怎么分化：
+  <b>开环</b>按设计一次打到底，<b>滚动优化</b>每段用实测姿态重算。
+  下面的井斜曲线告诉你差别从哪来——不是算法更聪明，而是它<b>知道自己错了</b>。
+</p>
+
+<div class="grid">
+  <div>
+    <div class="stage">
+      <svg id="chart" viewBox="0 0 620 300" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-label="轨迹剖面：开环 vs 滚动优化"></svg>
+      <div class="legend">
+        <span><i style="background:#b05a51"></i>开环（一次算到底）</span>
+        <span><i style="background:#2f7d6b"></i>滚动优化（每段重算）</span>
+        <span><i style="background:#e6f1ec;border:1px solid #2f7d6b"></i>靶区窗口</span>
+      </div>
+      <div class="cap">垂深 vs 水平位移。靶区窗口画成固定大小的方框示意——真实窗口通常只有几十米。</div>
+    </div>
+    <div class="stage" style="margin-top:10px">
+      <svg id="inc" viewBox="0 0 620 104" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-label="井斜角随井段变化"></svg>
+      <div class="cap">井斜角 vs 井段（每段 30 m）。<b>开环一旦过头就封顶在 90°，再也回不来</b>；滚动优化会提前收力。</div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="metrics" id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h5>对照</h5>
+      <table id="tbl"></table>
+    </div>
+    <div class="card">
+      <h5>为什么开环会偏</h5>
+      <p style="margin:0;font-size:9.8px;line-height:1.65;color:var(--ink-4)">
+        开环假设"下 2.9° 就真转 2.9°"。当地层只响应 70%，
+        误差会沿井段<b style="color:var(--ink-2)">逐段累加</b>，
+        而开环没有任何机制能发现它。
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <div class="ctl">
+    <label>地层响应比</label>
+    <input type="range" id="s-resp" min="55" max="145" step="5" value="130">
+    <span class="val" id="v-resp">1.30</span>
+  </div>
+  <div class="ctl">
+    <label>工具造斜上限</label>
+    <input type="range" id="s-lim" min="15" max="40" step="1" value="40">
+    <span class="val" id="v-lim">4.0°/30m</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     一、模型
+     ---------------------------------------------------------
+     定向段：1200 m 起，30 段 × 30 m = 900 m，目标井斜 88°
+     每段：给定造斜率指令 bCmd，实际 bAct = bCmd × resp
+     位置推进用中点井斜积分
+     ========================================================= */
+  var SEG = 30, NSEG = 30;
+  var START_TV = 1200, TARGET_INC = 88;
+  var PLAN_B = TARGET_INC / NSEG;          /* 2.933 °/30m */
+
+  var XMIN = -20, XMAX = 700;
+  var YMIN = 1150, YMAX = 2010;
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function simulate(resp, closed, bLimit) {
+    var tv = START_TV, hd = 0, inc = 0;
+    var path = [[hd, tv]], incs = [0];
+    var respEst = 1.0;
+    var dlsMax = 0, corrections = 0, k;
+
+    for (k = 0; k < NSEG; k++) {
+      var rem = NSEG - k;
+      var bCmd;
+
+      if (closed) {
+        /* 用当前响应估计，反推剩余段需要的每段造斜率 */
+        bCmd = (TARGET_INC - inc) / rem / Math.max(0.45, respEst);
+      } else {
+        bCmd = PLAN_B;
+      }
+      bCmd = clamp(bCmd, -bLimit, bLimit);
+
+      var bAct = bCmd * resp;
+      var incNext = clamp(inc + bAct, 0, 90);
+      bAct = incNext - inc;                 /* 触顶后实际造斜率变小 */
+
+      var mid = (inc + incNext) / 2 * Math.PI / 180;
+      tv += SEG * Math.cos(mid);
+      hd += SEG * Math.sin(mid);
+
+      /* 响应估计：只在未触顶、指令有效时更新 */
+      if (Math.abs(bCmd) > 0.25 && incNext < 89.5) {
+        var obs = bAct / bCmd;
+        if (isFinite(obs) && obs > 0.1 && obs < 5) {
+          respEst = 0.65 * respEst + 0.35 * obs;
+        }
+      }
+
+      if (Math.abs(bCmd - PLAN_B) > 0.5) corrections++;
+      dlsMax = Math.max(dlsMax, Math.abs(bAct));
+
+      inc = incNext;
+      path.push([hd, tv]);
+      incs.push(inc);
+    }
+
+    return {
+      path: path, incs: incs,
+      hd: hd, tv: tv, inc: inc,
+      dlsMax: dlsMax, corrections: corrections
+    };
+  }
+
+  /* 理想参考（地层完全按设计响应）→ 定义靶区中心 */
+  var IDEAL = simulate(1.0, false, 99);
+  var TG = { hd: IDEAL.hd, tv: IDEAL.tv };
+
+  function dev(p) {
+    var dx = p.hd - TG.hd, dy = p.tv - TG.tv;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /* =========================================================
+     二、绘图
+     ========================================================= */
+  var SW = 620, SH = 300;
+  var ML = 46, MR = 14, MT = 24, MB = 32;
+  var PW = SW - ML - MR, PH = SH - MT - MB;
+
+  function X(hd) { return ML + (hd - XMIN) / (XMAX - XMIN) * PW; }
+  function Y(tv) { return MT + (tv - YMIN) / (YMAX - YMIN) * PH; }
+
+  function pathOf(pts, col, w) {
+    var d = '', i;
+    for (i = 0; i < pts.length; i++) {
+      d += (i ? 'L' : 'M') + X(pts[i][0]).toFixed(1) + ' ' + Y(pts[i][1]).toFixed(1);
+    }
+    return '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="' + w +
+      '" stroke-linejoin="round" stroke-linecap="round"/>';
+  }
+
+  function drawPath(a, b) {
+    var s = '', g;
+    s += '<rect width="' + SW + '" height="' + SH + '" fill="#ffffff"/>';
+
+    /* 网格 */
+    for (g = 1200; g <= 2000; g += 200) {
+      s += '<line x1="' + ML + '" y1="' + Y(g).toFixed(1) + '" x2="' + (SW - MR) +
+        '" y2="' + Y(g).toFixed(1) + '" stroke="#f4f1e9"/>';
+      s += '<text x="' + (ML - 6) + '" y="' + (Y(g) + 3).toFixed(1) +
+        '" font-size="7.4" fill="#9ba3a9" text-anchor="end" ' +
+        'font-family="ui-monospace,monospace">' + g + '</text>';
+    }
+    for (g = 0; g <= 600; g += 200) {
+      s += '<line x1="' + X(g).toFixed(1) + '" y1="' + MT + '" x2="' + X(g).toFixed(1) +
+        '" y2="' + (SH - MB) + '" stroke="#f4f1e9"/>';
+      s += '<text x="' + X(g).toFixed(1) + '" y="' + (SH - MB + 13) +
+        '" font-size="7.4" fill="#9ba3a9" text-anchor="middle" ' +
+        'font-family="ui-monospace,monospace">' + g + '</text>';
+    }
+
+    s += '<text x="4" y="' + (MT + 8) + '" font-size="7.6" fill="#9ba3a9" ' +
+      'font-family="ui-monospace,monospace">垂深 m</text>';
+    s += '<text x="' + (SW - MR) + '" y="' + (SH - 5) + '" font-size="7.6" ' +
+      'fill="#9ba3a9" text-anchor="end" font-family="ui-monospace,monospace">' +
+      '水平位移 m →</text>';
+
+    /* 靶区（固定像素大小示意） */
+    var tx = X(TG.hd), ty = Y(TG.tv);
+    s += '<rect x="' + (tx - 17).toFixed(1) + '" y="' + (ty - 9).toFixed(1) +
+      '" width="34" height="18" rx="3" fill="#e6f1ec" stroke="#2f7d6b" stroke-opacity=".65"/>';
+    s += '<text x="' + (tx + 22).toFixed(1) + '" y="' + (ty + 3).toFixed(1) +
+      '" font-size="7.6" fill="#235f51" font-weight="600">靶区</text>';
+
+    /* 两条轨迹 */
+    s += pathOf(a.path, '#b05a51', 2);
+    s += pathOf(b.path, '#2f7d6b', 2);
+
+    /* 终点 */
+    s += '<circle cx="' + X(a.hd).toFixed(1) + '" cy="' + Y(a.tv).toFixed(1) +
+      '" r="3.2" fill="#b05a51"/>';
+    s += '<circle cx="' + X(b.hd).toFixed(1) + '" cy="' + Y(b.tv).toFixed(1) +
+      '" r="3.2" fill="#2f7d6b"/>';
+
+    /* 起点 */
+    s += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(START_TV).toFixed(1) +
+      '" r="3" fill="#4d565b"/>';
+    s += '<text x="' + (X(0) + 7).toFixed(1) + '" y="' + (Y(START_TV) - 3).toFixed(1) +
+      '" font-size="7.6" fill="#79828a">造斜点 1200 m</text>';
+
+    /* 偏差连线 */
+    s += '<line x1="' + X(a.hd).toFixed(1) + '" y1="' + Y(a.tv).toFixed(1) +
+      '" x2="' + tx.toFixed(1) + '" y2="' + ty.toFixed(1) +
+      '" stroke="#b05a51" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".55"/>';
+
+    document.getElementById('chart').innerHTML = s;
+  }
+
+  var IL = 46, IR = 14, IT = 18, IB = 26;
+  function IX(k) { return IL + k / NSEG * (SW - IL - IR); }
+  function IY(v) { return IT + (1 - v / 100) * (104 - IT - IB); }
+
+  function incPath(arr, col) {
+    var d = '', i;
+    for (i = 0; i < arr.length; i++) {
+      d += (i ? 'L' : 'M') + IX(i).toFixed(1) + ' ' + IY(arr[i]).toFixed(1);
+    }
+    return '<path d="' + d + '" fill="none" stroke="' + col +
+      '" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/>';
+  }
+
+  function drawInc(a, b) {
+    var s = '', k;
+    s += '<rect width="' + SW + '" height="104" fill="#ffffff"/>';
+    s += '<text x="4" y="11" font-size="7.4" fill="#9ba3a9" ' +
+      'font-family="ui-monospace,monospace">井斜角 °</text>';
+
+    /* 90° 封顶 */
+    s += '<line x1="' + IL + '" y1="' + IY(90).toFixed(1) + '" x2="' + (SW - IR) +
+      '" y2="' + IY(90).toFixed(1) + '" stroke="#c9c2b0" stroke-dasharray="2 4"/>';
+    s += '<text x="' + (SW - IR) + '" y="' + (IY(90) - 3).toFixed(1) +
+      '" font-size="7.2" fill="#9ba3a9" text-anchor="end">90° 封顶</text>';
+
+    /* 目标 88° */
+    s += '<line x1="' + IL + '" y1="' + IY(88).toFixed(1) + '" x2="' + (SW - IR) +
+      '" y2="' + IY(88).toFixed(1) + '" stroke="#2f7d6b" stroke-dasharray="4 3" ' +
+      'stroke-opacity=".55"/>';
+    s += '<text x="' + (SW - IR) + '" y="' + (IY(88) + 10).toFixed(1) +
+      '" font-size="7.2" fill="#235f51" text-anchor="end">目标 88°</text>';
+
+    /* 曲线 */
+    s += incPath(a.incs, '#b05a51');
+    s += incPath(b.incs, '#2f7d6b');
+
+    /* 轴 */
+    s += '<line x1="' + IL + '" y1="' + (104 - IB) + '" x2="' + (SW - IR) +
+      '" y2="' + (104 - IB) + '" stroke="#ddd7c8"/>';
+    [0, 10, 20, 30].forEach(function (t) {
+      s += '<text x="' + IX(t).toFixed(1) + '" y="' + (104 - IB + 12) +
+        '" font-size="7.4" fill="#9ba3a9" text-anchor="middle" ' +
+        'font-family="ui-monospace,monospace">' + t + '</text>';
+    });
+    s += '<text x="' + (SW - IR) + '" y="' + (104 - 3) + '" font-size="7.4" ' +
+      'fill="#9ba3a9" text-anchor="end" font-family="ui-monospace,monospace">' +
+      '井段</text>';
+
+    document.getElementById('inc').innerHTML = s;
+  }
+
+  /* =========================================================
+     三、侧栏
+     ========================================================= */
+  function drawSide(a, b, resp, lim) {
+    var da = dev(a), db = dev(b);
+    var inA = da <= 20, inB = db <= 20;
+
+    function cls(ok) { return ok ? 'good' : 'bad'; }
+
+    document.getElementById('metrics').innerHTML =
+      '<div class="metric ' + cls(inA) + '"><div class="l">开环偏差</div>' +
+        '<div class="v">' + da.toFixed(0) + '<small>m</small></div></div>' +
+      '<div class="metric ' + cls(inB) + '"><div class="l">滚动偏差</div>' +
+        '<div class="v">' + db.toFixed(0) + '<small>m</small></div></div>' +
+      '<div class="metric ' + (Math.abs(a.inc - 88) < 3 ? 'good' : 'bad') +
+        '"><div class="l">开环末段井斜</div><div class="v">' +
+        a.inc.toFixed(1) + '<small>°</small></div></div>' +
+      '<div class="metric ' + (Math.abs(b.inc - 88) < 3 ? 'good' : 'bad') +
+        '"><div class="l">滚动末段井斜</div><div class="v">' +
+        b.inc.toFixed(1) + '<small>°</small></div></div>';
+
+    /* 判词 */
+    var vEl = document.getElementById('verdict'), html, vc;
+
+    var reachable = PLAN_B * resp <= lim * 1.01 && TARGET_INC / NSEG <= lim * 1.01;
+
+    if (lim < PLAN_B) {
+      vc = 'bad';
+      html = '工具造斜上限 <b>' + lim.toFixed(1) + '°/30m</b>，低于设计需要的 ' +
+        PLAN_B.toFixed(2) + '°/30m。<b>两个策略都打不到 88°</b>——闭环只能救"不知道"，' +
+        '救不了"做不到"。';
+    } else if (inA && inB) {
+      vc = 'ok';
+      html = '这次地层几乎按设计响应，<b>开环也能打准</b>。把响应比推到 0.65 或 1.35 再看' +
+        '——那才是真实井下的常态。';
+    } else if (!inA && inB) {
+      vc = 'ok';
+      html = '滚动优化把靶区偏差从 <b>' + da.toFixed(0) + ' m 压到 ' +
+        db.toFixed(0) + ' m</b>。代价是第 4 步算了 30 次而不是 1 次——' +
+        '<b>在钻井里这个代价可以忽略</b>。';
+    } else {
+      vc = 'warn';
+      html = '两个都没进靶区。<b>把响应比调回 1.00 附近</b>，或把工具上限调高——' +
+        '当前组合下，闭环也没能收敛。';
+    }
+
+    vEl.className = 'verdict ' + vc;
+    vEl.innerHTML = html;
+
+    /* 对照表 */
+    document.getElementById('tbl').innerHTML =
+      '<tr><td>最大狗腿 · 开环</td><td class="' +
+        (a.dlsMax > 3 ? 'bad' : 'ok') + '">' + a.dlsMax.toFixed(2) + '</td></tr>' +
+      '<tr><td>最大狗腿 · 滚动</td><td class="' +
+        (b.dlsMax > 3 ? 'bad' : 'ok') + '">' + b.dlsMax.toFixed(2) + '</td></tr>' +
+      '<tr><td>纠偏段数 · 开环</td><td>' + a.corrections + ' / 30</td></tr>' +
+      '<tr><td>纠偏段数 · 滚动</td><td>' + b.corrections + ' / 30</td></tr>' +
+      '<tr><td>地层响应比</td><td>' + resp.toFixed(2) + '</td></tr>';
+  }
+
+  /* =========================================================
+     四、主循环
+     ========================================================= */
+  var sResp = document.getElementById('s-resp');
+  var sLim = document.getElementById('s-lim');
+  var vResp = document.getElementById('v-resp');
+  var vLim = document.getElementById('v-lim');
+
+  function paint() {
+    var resp = Number(sResp.value) / 100;
+    var lim = Number(sLim.value) / 10;
+
+    vResp.textContent = resp.toFixed(2);
+    vLim.textContent = lim.toFixed(1) + '°/30m';
+
+    var a = simulate(resp, false, lim);
+    var b = simulate(resp, true, lim);
+
+    drawPath(a, b);
+    drawInc(a, b);
+    drawSide(a, b, resp, lim);
+  }
+
+  sResp.addEventListener('input', paint);
+  sLim.addEventListener('input', paint);
+
+  paint();
+
+})();
+</script>
+
+</body>
+</html>

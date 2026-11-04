@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>钻井液性能智能调控 · 软测量与平滑加药推荐</title>
+<style>
+  :root{
+    --jade:#2f8f7a; --jade-1:#eaf5f1; --jade-2:#c6e4da; --jade-3:#1f7261;
+    --clay:#b4653f; --clay-1:#fbf1ea; --clay-2:#eed6c6;
+    --ink:#1f2a30; --ink-1:#eef1f3; --ink-2:#d5dde1; --ink-3:#5b6b74; --ink-4:#9aa8b0;
+    --bg:#f4f6f6; --panel:#ffffff; --danger:#c0392b; --danger-1:#fbeae7;
+    --warn:#d4a017; --warn-1:#fdf8e7;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:15px; line-height:1.6;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ height:100%; display:flex; flex-direction:column; background:var(--bg); }
+
+  .topbar{
+    height:42px; flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--ink-2);
+  }
+  .topbar .dot{ width:10px; height:10px; border-radius:50%; background:var(--jade); box-shadow:0 0 0 3px var(--jade-1); }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar .scene{ margin-left:auto; font-size:12px; color:var(--ink-4); font-family:ui-monospace,Menlo,monospace; }
+
+  .panes{ flex:1 1 auto; min-height:0; position:relative; }
+  .pane{ height:100%; overflow:auto; padding:12px; }
+  .pane::-webkit-scrollbar{ width:8px; height:8px; }
+  .pane::-webkit-scrollbar-thumb{ background:var(--ink-2); border-radius:4px; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--ink-2); border-radius:10px;
+    display:flex; flex-direction:column; min-height:0; min-width:0; overflow:hidden;
+  }
+  .panel-title{
+    flex:0 0 auto; font-size:13px; font-weight:600; color:var(--ink-3);
+    padding:9px 14px 8px; border-bottom:1px solid var(--ink-1);
+    display:flex; align-items:center; gap:7px;
+  }
+  .panel-title::before{ content:''; width:3px; height:14px; border-radius:2px; background:var(--jade); }
+  .svg-box{ flex:1 1 auto; min-height:0; padding:5px 8px 7px; }
+  .svg-box svg{ width:100%; height:100%; display:block; }
+
+  .demo-layout{ display:flex; gap:12px; height:100%; min-height:0; }
+  .panel-ctrl{ flex:0 0 246px; width:246px; }
+  .ctrl-body{ flex:1 1 auto; min-height:0; overflow:auto; padding:10px 13px 14px; }
+
+  .field{ margin-bottom:16px; }
+  .field-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:5px; }
+  .field-head span{ font-size:13px; color:var(--ink-3); }
+  .field-head b{ font-size:13.5px; font-weight:600; color:var(--jade-3); font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,monospace; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:3px;
+    background:linear-gradient(90deg,var(--jade-2),var(--ink-1)); outline:none; cursor:pointer; margin:5px 0 0;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:17px; height:17px; border-radius:50%;
+    background:var(--jade); border:2.5px solid #fff; box-shadow:0 1px 4px rgba(31,42,48,.28); cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid #fff; box-shadow:0 1px 4px rgba(31,42,48,.28); cursor:pointer;
+  }
+
+  .btn{
+    width:100%; height:38px; border-radius:8px; font-size:13.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid transparent;
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .btn-primary{ background:var(--jade); color:#fff; box-shadow:0 2px 8px rgba(47,143,122,.24); }
+  .btn-primary:hover{ background:var(--jade-3); }
+  .btn-primary:disabled{ opacity:.62; cursor:progress; box-shadow:none; }
+
+  .hint{
+    margin-top:12px; padding:9px 11px; background:var(--jade-1);
+    border:1px solid var(--jade-2); border-radius:8px;
+    font-size:12.5px; line-height:1.65; color:var(--jade-3);
+  }
+  .hint b{ font-weight:600; }
+
+  .demo-stage{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:12px; min-height:0; }
+  .panel-main{ flex:1 1 auto; min-height:0; }
+  .demo-bottom{ flex:0 0 210px; height:210px; display:flex; gap:12px; }
+  .panel-dosage{ flex:1.1 1 0; min-width:0; }
+  .panel-met{ flex:1 1 0; min-width:0; }
+
+  .metrics{ flex:1 1 auto; min-height:0; padding:4px 13px 8px; display:flex; flex-direction:column; justify-content:space-around; }
+  .metric{ display:flex; align-items:center; gap:9px; padding:4px 0; border-bottom:1px dashed var(--ink-1); }
+  .metric:last-child{ border-bottom:none; }
+  .m-label{ flex:0 0 88px; font-size:12.5px; color:var(--ink-3); white-space:nowrap; }
+  .m-value{ font-size:17px; font-weight:600; font-family:ui-monospace,Menlo,monospace; white-space:nowrap; }
+  .m-value em{ font-style:normal; font-size:11.5px; font-weight:500; color:var(--ink-4); margin-left:1px; }
+  .m-value.is-ok{ color:var(--jade-3); }
+  .m-value.is-warn{ color:var(--warn); }
+  .m-value.is-bad{ color:var(--danger); }
+  .m-sub{ margin-left:auto; font-size:11.5px; color:var(--ink-4); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .badge{ display:inline-flex; align-items:center; gap:5px; padding:2px 11px; border-radius:20px; font-size:13.5px; font-weight:600; }
+  .badge::before{ content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .badge.ok{ color:var(--jade-3); background:var(--jade-1); }
+  .badge.warn{ color:var(--warn); background:var(--warn-1); }
+  .badge.bad{ color:var(--danger); background:var(--danger-1); }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="wrap">
+  <header class="topbar">
+    <span class="dot"></span>
+    <h1>钻井液性能智能调控 · 软测量与平滑加药推荐</h1>
+    <span class="scene">sceneId: s4-d5</span>
+  </header>
+
+  <div class="panes">
+    <section class="pane active" id="pane-demo">
+      <div class="demo-layout">
+        <aside class="panel panel-ctrl">
+          <div class="panel-title">时间与模式</div>
+          <div class="ctrl-body">
+            <div class="field">
+              <div class="field-head"><span>时间轴 (h)</span><b id="v-time">0.0 h</b></div>
+              <input type="range" id="s-time" min="0" max="12" step="0.1" value="0" />
+            </div>
+            <div class="scenario-list" style="margin-top:16px;">
+              <button class="btn btn-primary" id="btn-play">▶ 播放</button>
+            </div>
+            <div class="hint" style="margin-top:16px;">
+              <b>技术组合：</b>软测量预测（时序预测）+ 平滑加药（优化算法）+ 处理剂-性能关联（知识图谱）+ 建议文本（NLP）。图像识别不参与。
+            </div>
+          </div>
+        </aside>
+
+        <div class="demo-stage">
+          <section class="panel panel-main">
+            <div class="panel-title">性能变化趋势（软测量预测）</div>
+            <div class="svg-box"><svg id="svg-main" viewBox="0 0 680 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg></div>
+          </section>
+          <div class="demo-bottom">
+            <section class="panel panel-dosage">
+              <div class="panel-title">处理剂加量对比：人工阶梯 vs AI 平滑</div>
+              <div class="svg-box"><svg id="svg-dosage" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg></div>
+            </section>
+            <section class="panel panel-met">
+              <div class="panel-title">指标面板</div>
+              <div class="metrics">
+                <div class="metric">
+                  <div class="m-label">预测黏度</div>
+                  <div class="m-value" id="m-visc">45.0<em>mPa·s</em></div>
+                  <div class="m-sub" id="m-visc-sub">目标 40-50</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">预测滤失</div>
+                  <div class="m-value" id="m-fl">4.0<em>mL</em></div>
+                  <div class="m-sub" id="m-fl-sub">目标 ≤ 5</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">推荐加药</div>
+                  <div class="m-value" id="m-dosage" style="font-size:15px; color:var(--jade-3);">0.0<em>kg/h</em></div>
+                  <div class="m-sub" id="m-dosage-sub">AI 平滑推荐</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">震荡指数</div>
+                  <div class="m-value" id="m-osc">0.0</div>
+                  <div class="m-sub" id="m-osc-sub">越接近 0 越平稳</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var MAX_TIME = 12;
+  var state = {
+    time: 0,
+    playing: false,
+    data: []
+  };
+
+  var els = {}, listeners = [], timers = [], mounted = false;
+
+  function q(id) { return document.getElementById(id); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function f1(n) { return isFinite(n) ? Number(n).toFixed(1) : '—'; }
+  function f0(n) { return isFinite(n) ? Number(n).toFixed(0) : '—'; }
+
+  /* 生成仿真数据 */
+  function generateData() {
+    var data = [];
+    var i, t;
+    for (i = 0; i <= MAX_TIME * 10; i++) {
+      t = i / 10;
+      var temp = 65 + Math.sin(t * 0.5) * 2 + t * 1.2;
+      var flow = 32 + Math.sin(t * 1.5) * 2 + Math.cos(t * 3) * 1;
+
+      var trueVisc = 48 - (temp - 65) * 0.8 - (flow - 32) * 0.5;
+      var trueFl = 3.5 + (temp - 65) * 0.15 + (flow - 32) * 0.1;
+      trueVisc += (Math.random() - 0.5) * 0.8;
+      trueFl += (Math.random() - 0.5) * 0.15;
+
+      var manualDose = 2.0;
+      var manVisc = trueVisc;
+      var manFl = trueFl;
+      if (t >= 6) {
+        manualDose = 5.5;
+        manVisc += 12 * Math.min(1, (t - 6) / 1.5);
+        manFl -= 2.5 * Math.min(1, (t - 6) / 1.5);
+      }
+      if (t >= 9) {
+        manualDose = 1.0;
+        manVisc -= 14 * Math.min(1, (t - 9) / 2);
+        manFl += 3.5 * Math.min(1, (t - 9) / 2);
+      }
+
+      var targetVisc = 45, targetFl = 4.0;
+      var diffVisc = targetVisc - trueVisc;
+      var diffFl = trueFl - targetFl;
+      var recFlDose = Math.max(0, diffFl * 1.5);
+      var recViscDose = Math.max(0, diffVisc * 0.8);
+      var aiDose = recFlDose + recViscDose;
+      var aiVisc = trueVisc + recViscDose * 0.8;
+      var aiFl = trueFl - recFlDose * 0.6;
+
+      data.push({
+        t: t,
+        visc: trueVisc,
+        fl: trueFl,
+        manVisc: manVisc,
+        manFl: manFl,
+        aiVisc: aiVisc,
+        aiFl: aiFl,
+        manualDose: manualDose,
+        aiDose: aiDose
+      });
+    }
+    return data;
+  }
+
+  /* 渲染主图 */
+  function renderMain() {
+    var W = 680, H = 300;
+    var ML = 50, MR = 50, MT = 20, MB = 35;
+    var pw = W - ML - MR, ph = H - MT - MB;
+    var p = ['<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>'];
+
+    function tx(t) { return ML + t / MAX_TIME * pw; }
+    function tyV(v) { return MT + ph - (clamp(v, 30, 60) - 30) / 30 * ph; }
+    function tyF(v) { return MT + ph - (clamp(v, 0, 8) / 8) * ph; }
+
+    for (var gi = 0; gi <= 6; gi++) {
+      var gt = gi * 2;
+      p.push('<line x1="' + tx(gt) + '" y1="' + MT + '" x2="' + tx(gt) + '" y2="' + (MT + ph) + '" stroke="#eef1f3" stroke-width="1"/>');
+      p.push('<text x="' + tx(gt) + '" y="' + (MT + ph + 16) + '" text-anchor="middle" font-size="10" fill="#9aa8b0">' + gt + 'h</text>');
+    }
+    for (var gi = 0; gi <= 3; gi++) {
+      var gv = 30 + gi * 10;
+      p.push('<text x="' + (ML - 8) + '" y="' + (tyV(gv) + 4) + '" text-anchor="end" font-size="10" fill="#5b6b74">' + gv + '</text>');
+    }
+    for (var gi = 0; gi <= 4; gi++) {
+      var gf = gi * 2;
+      p.push('<text x="' + (ML + pw + 8) + '" y="' + (tyF(gf) + 4) + '" text-anchor="start" font-size="10" fill="#b4653f">' + gf + '</text>');
+    }
+
+    p.push('<rect x="' + ML + '" y="' + tyV(50) + '" width="' + pw + '" height="' + (tyV(40) - tyV(50)) + '" fill="rgba(47,143,122,0.08)"/>');
+    p.push('<text x="' + (ML + pw - 4) + '" y="' + (tyV(50) - 4) + '" text-anchor="end" font-size="9" fill="#2f8f7a">黏度目标 40-50</text>');
+
+    var dManV = '', dAiV = '', dManF = '', dAiF = '';
+    for (var i = 0; i < state.data.length; i++) {
+      var pt = state.data[i];
+      dManV += (i === 0 ? 'M' : 'L') + tx(pt.t) + ',' + tyV(pt.manVisc);
+      dAiV += (i === 0 ? 'M' : 'L') + tx(pt.t) + ',' + tyV(pt.aiVisc);
+      dManF += (i === 0 ? 'M' : 'L') + tx(pt.t) + ',' + tyF(pt.manFl);
+      dAiF += (i === 0 ? 'M' : 'L') + tx(pt.t) + ',' + tyF(pt.aiFl);
+    }
+
+    p.push('<path d="' + dManV + '" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="5 3" opacity="0.8"/>');
+    p.push('<path d="' + dManF + '" fill="none" stroke="#d4a017" stroke-width="2" stroke-dasharray="5 3" opacity="0.8"/>');
+    p.push('<path d="' + dAiV + '" fill="none" stroke="#2f8f7a" stroke-width="2.5"/>');
+    p.push('<path d="' + dAiF + '" fill="none" stroke="#2980b9" stroke-width="2.5"/>');
+
+    var curX = tx(state.time);
+    p.push('<line x1="' + curX + '" y1="' + MT + '" x2="' + curX + '" y2="' + (MT + ph) + '" stroke="#1f2a30" stroke-width="1.5" stroke-dasharray="4 2" opacity="0.5"/>');
+
+    var lgX = W - 160, lgY = 10;
+    p.push('<rect x="' + lgX + '" y="' + lgY + '" width="150" height="62" rx="4" fill="#fff" fill-opacity="0.92" stroke="#e2e8ea" stroke-width="1"/>');
+    p.push('<line x1="' + (lgX + 10) + '" y1="' + (lgY + 14) + '" x2="' + (lgX + 30) + '" y2="' + (lgY + 14) + '" stroke="#c0392b" stroke-width="2" stroke-dasharray="4 2"/>');
+    p.push('<text x="' + (lgX + 36) + '" y="' + (lgY + 18) + '" font-size="9.5" fill="#5b6b74">人工黏度</text>');
+    p.push('<line x1="' + (lgX + 10) + '" y1="' + (lgY + 30) + '" x2="' + (lgX + 30) + '" y2="' + (lgY + 30) + '" stroke="#2f8f7a" stroke-width="2.5"/>');
+    p.push('<text x="' + (lgX + 36) + '" y="' + (lgY + 34) + '" font-size="9.5" fill="#1f7261">AI 黏度</text>');
+    p.push('<line x1="' + (lgX + 10) + '" y1="' + (lgY + 46) + '" x2="' + (lgX + 30) + '" y2="' + (lgY + 46) + '" stroke="#d4a017" stroke-width="2" stroke-dasharray="4 2"/>');
+    p.push('<text x="' + (lgX + 36) + '" y="' + (lgY + 50) + '" font-size="9.5" fill="#b4653f">人工滤失</text>');
+    p.push('<line x1="' + (lgX + 80) + '" y1="' + (lgY + 46) + '" x2="' + (lgX + 100) + '" y2="' + (lgY + 46) + '" stroke="#2980b9" stroke-width="2.5"/>');
+    p.push('<text x="' + (lgX + 106) + '" y="' + (lgY + 50) + '" font-size="9.5" fill="#1f7261">AI 滤失</text>');
+
+    p.push('<text x="' + (ML + pw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="#5b6b74">时间 (h)</text>');
+    p.push('<text x="14" y="' + (MT + ph / 2) + '" text-anchor="middle" font-size="10" fill="#5b6b74" transform="rotate(-90 14 ' + (MT + ph / 2) + ')">黏度 (mPa·s)</text>');
+    p.push('<text x="' + (W - 10) + '" y="' + (MT + ph / 2) + '" text-anchor="middle" font-size="10" fill="#b4653f" transform="rotate(90 ' + (W - 10) + ' ' + (MT + ph / 2) + ')">滤失 (mL)</text>');
+
+    return p.join('');
+  }
+
+  /* 渲染底部左图：加药对比 */
+  function renderDosage() {
+    var W = 300, H = 160;
+    var ML = 40, MR = 15, MT = 20, MB = 28;
+    var pw = W - ML - MR, ph = H - MT - MB;
+    var p = ['<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>'];
+
+    function tx(t) { return ML + t / MAX_TIME * pw; }
+    function ty(v) { return MT + ph - clamp(v, 0, 8) / 8 * ph; }
+
+    for (var gi = 0; gi <= 4; gi++) {
+      var gv = gi * 2;
+      p.push('<line x1="' + ML + '" y1="' + ty(gv) + '" x2="' + (ML + pw) + '" y2="' + ty(gv) + '" stroke="#eef1f3" stroke-width="1"/>');
+      p.push('<text x="' + (ML - 5) + '" y="' + (ty(gv) + 3) + '" text-anchor="end" font-size="9" fill="#9aa8b0">' + gv + '</text>');
+    }
+
+    var dMan = '';
+    for (var i = 0; i < state.data.length; i++) {
+      var pt = state.data[i];
+      dMan += (i === 0 ? 'M' : 'L') + tx(pt.t) + ',' + ty(pt.manualDose);
+    }
+    p.push('<path d="' + dMan + '" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="4 2"/>');
+
+    var dAi = '';
+    for (var i = 0; i < state.data.length; i++) {
+      var pt = state.data[i];
+      dAi += (i === 0 ? 'M' : 'L') + tx(pt.t) + ',' + ty(pt.aiDose);
+    }
+    p.push('<path d="' + dAi + '" fill="none" stroke="#2f8f7a" stroke-width="2.5"/>');
+
+    var curX = tx(state.time);
+    p.push('<line x1="' + curX + '" y1="' + MT + '" x2="' + curX + '" y2="' + (MT + ph) + '" stroke="#1f2a30" stroke-width="1" stroke-dasharray="3 2" opacity="0.4"/>');
+
+    p.push('<rect x="' + (W - 130) + '" y="' + MT + '" width="120" height="36" rx="4" fill="#fff" fill-opacity="0.9" stroke="#e2e8ea" stroke-width="1"/>');
+    p.push('<line x1="' + (W - 122) + '" y1="' + (MT + 12) + '" x2="' + (W - 102) + '" y2="' + (MT + 12) + '" stroke="#c0392b" stroke-width="2" stroke-dasharray="3 2"/>');
+    p.push('<text x="' + (W - 98) + '" y="' + (MT + 16) + '" font-size="9" fill="#c0392b">人工(阶梯)</text>');
+    p.push('<line x1="' + (W - 122) + '" y1="' + (MT + 28) + '" x2="' + (W - 102) + '" y2="' + (MT + 28) + '" stroke="#2f8f7a" stroke-width="2.5"/>');
+    p.push('<text x="' + (W - 98) + '" y="' + (MT + 32) + '" font-size="9" fill="#1f7261">AI(平滑)</text>');
+
+    p.push('<text x="' + (ML + pw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="#5b6b74">时间 (h)</text>');
+    p.push('<text x="12" y="' + (MT + ph / 2) + '" text-anchor="middle" font-size="10" fill="#5b6b74" transform="rotate(-90 12 ' + (MT + ph / 2) + ')">加药量 (kg/h)</text>');
+
+    return p.join('');
+  }
+
+  function renderMetrics() {
+    var idx = Math.round(state.time * 10);
+    idx = clamp(idx, 0, state.data.length - 1);
+    var pt = state.data[idx];
+
+    if (els.mVisc) {
+      els.mVisc.innerHTML = f1(pt.aiVisc) + '<em>mPa·s</em>';
+      els.mVisc.className = 'm-value ' + (pt.aiVisc >= 40 && pt.aiVisc <= 50 ? 'is-ok' : 'is-bad');
+    }
+    if (els.mFl) {
+      els.mFl.innerHTML = f1(pt.aiFl) + '<em>mL</em>';
+      els.mFl.className = 'm-value ' + (pt.aiFl <= 5 ? 'is-ok' : 'is-bad');
+    }
+    if (els.mDosage) {
+      els.mDosage.innerHTML = f1(pt.aiDose) + '<em>kg/h</em>';
+    }
+
+    var osc = Math.abs(pt.manVisc - 45) * 0.8 + Math.abs(pt.manFl - 4) * 1.5;
+    osc = clamp(osc, 0, 15);
+    if (els.mOsc) {
+      els.mOsc.textContent = f1(osc);
+      els.mOsc.className = 'm-value ' + (osc > 5 ? 'is-bad' : 'is-ok');
+    }
+  }
+
+  function updateUI() {
+    if (els.svgMain) els.svgMain.innerHTML = renderMain();
+    if (els.svgDosage) els.svgDosage.innerHTML = renderDosage();
+    renderMetrics();
+    if (els.vTime) els.vTime.textContent = f1(state.time) + ' h';
+    if (els.sTime) els.sTime.value = state.time;
+  }
+
+  /* 交互 */
+  function onTimeChange() {
+    state.time = parseFloat(els.sTime.value);
+    updateUI();
+  }
+
+  function onPlay() {
+    if (state.playing) {
+      state.playing = false;
+      els.btnPlay.textContent = '▶ 播放';
+      return;
+    }
+    state.playing = true;
+    els.btnPlay.textContent = '⏸ 暂停';
+    var t = setInterval(function () {
+      if (!state.playing) { clearInterval(t); return; }
+      state.time += 0.1;
+      if (state.time >= MAX_TIME) {
+        state.time = MAX_TIME;
+        state.playing = false;
+        els.btnPlay.textContent = '▶ 播放';
+        clearInterval(t);
+      }
+      updateUI();
+    }, 100);
+    timers.push(t);
+  }
+
+  function addL(el, ev, fn) { if (el) { el.addEventListener(ev, fn, false); listeners.push([el, ev, fn]); } }
+
+  /* 初始化 */
+  function init() {
+    els.svgMain = q('svg-main'); els.svgDosage = q('svg-dosage');
+    els.sTime = q('s-time'); els.vTime = q('v-time');
+    els.btnPlay = q('btn-play');
+    els.mVisc = q('m-visc'); els.mViscSub = q('m-visc-sub');
+    els.mFl = q('m-fl'); els.mFlSub = q('m-fl-sub');
+    els.mDosage = q('m-dosage'); els.mDosageSub = q('m-dosage-sub');
+    els.mOsc = q('m-osc'); els.mOscSub = q('m-osc-sub');
+
+    state.data = generateData();
+    state.time = 0;
+
+    addL(els.sTime, 'input', onTimeChange);
+    addL(els.btnPlay, 'click', onPlay);
+
+    updateUI();
+  }
+
+  function destroy() {
+    var i;
+    for (i = 0; i < listeners.length; i++) { try { listeners[i][0].removeEventListener(listeners[i][1], listeners[i][2], false); } catch (e) {} }
+    listeners = [];
+    for (i = 0; i < timers.length; i++) clearInterval(timers[i]);
+    timers = [];
+    if (els.svgMain) els.svgMain.innerHTML = '';
+    if (els.svgDosage) els.svgDosage.innerHTML = '';
+    state.playing = false;
+  }
+
+  /* 生命周期钩子 */
+  window.__CASE_MOUNT__ = function () {
+    console.log('[s4-d5] mount() called');
+    try {
+      init();
+      return true;
+    } catch (e) {
+      console.error('[s4-d5] mount failed:', e);
+      return false;
+    }
+  };
+
+  window.__CASE_UNMOUNT__ = function () {
+    console.log('[s4-d5] unmount() called');
+    try {
+      destroy();
+      return true;
+    } catch (e) {
+      console.error('[s4-d5] unmount failed:', e);
+      return false;
+    }
+  };
+
+  /* 自动引导执行（作为兜底） */
+  function boot() {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() { window.__CASE_MOUNT__(); });
+    } else {
+      window.__CASE_MOUNT__();
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

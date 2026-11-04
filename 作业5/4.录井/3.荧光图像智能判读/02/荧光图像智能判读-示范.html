@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>荧光图像智能判读 · 示范</title>
+<style>
+  :root{
+    --jade:#2f7d6b; --jade-d:#235f51; --jade-l:#e6f1ec;
+    --clay:#b26a39; --clay-l:#f8ecdf;
+    --opt:#41699b; --opt-l:#e7eef9;
+    --ink:#242b2e; --ink-2:#4d565b; --ink-3:#79828a; --ink-4:#9ba3a9;
+    --line:#e9e4d8; --line-2:#ddd7c8; --line-3:#c9c2b0;
+    --card:#ffffff; --soft:#fdfcf9; --paper:#fbfaf6;
+    --ok:#3f8560; --warn:#a97a1c; --bad:#b05a51;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:16px 18px 22px; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .kick{ font-family:var(--mono); font-size:9px; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--jade-d); }
+  h1{ font-size:17px; font-weight:650; margin:7px 0 0; letter-spacing:-.01em; }
+  .desc{ margin:7px 0 0; font-size:12px; color:var(--ink-3);
+    line-height:1.7; max-width:82ch; }
+  .desc b{ color:var(--ink-2); }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) 236px;
+    gap:12px; margin-top:14px; align-items:start; }
+  .stage{ background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:9px 10px 8px; min-width:0; }
+  .stage svg{ display:block; width:100%; height:auto; }
+  .cap{ font-size:10px; color:var(--ink-4); margin-top:6px; line-height:1.6; }
+
+  .side{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .metric{ background:var(--card); padding:8px 9px; }
+  .metric .l{ font-family:var(--mono); font-size:7.4px; letter-spacing:.07em;
+    color:var(--ink-4); white-space:nowrap; }
+  .metric .v{ font-family:var(--mono); font-size:15px; margin-top:4px;
+    line-height:1; color:var(--ink); }
+  .metric .v small{ font-size:8px; color:var(--ink-4); margin-left:2px; }
+  .metric.good .v{ color:var(--ok); }
+  .metric.warn .v{ color:var(--warn); }
+  .metric.bad .v{ color:var(--bad); }
+
+  .verdict{ font-size:11.2px; line-height:1.7; color:var(--ink-2);
+    border-left:2.5px solid var(--line-2); padding-left:9px; }
+  .verdict b{ color:var(--ink); }
+  .verdict.ok{ border-color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); }
+
+  .card{ border:1px solid var(--line); border-radius:8px;
+    background:var(--soft); padding:9px 10px; }
+  .card h5{ margin:0 0 6px; font-family:var(--mono); font-size:7.6px;
+    letter-spacing:.1em; color:var(--ink-4); font-weight:400; text-transform:uppercase; }
+  table{ width:100%; border-collapse:collapse; font-size:9.6px; }
+  th{ font-family:var(--mono); font-size:7.2px; letter-spacing:.06em;
+    color:var(--ink-4); font-weight:400; text-align:right; padding:3px 0 4px;
+    border-bottom:1px solid var(--line-2); }
+  td{ padding:3px 0; border-bottom:1px solid var(--line); color:var(--ink-3);
+    text-align:right; font-family:var(--mono); white-space:nowrap; }
+  th:first-child,td:first-child{ text-align:left; font-family:inherit; }
+  tr:last-child td{ border-bottom:0; }
+  td.ok{ color:var(--ok); } td.warn{ color:var(--warn); } td.bad{ color:var(--bad); }
+
+  .ctrls{ display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+    margin-top:11px; padding:11px 14px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; }
+  .ctl{ display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--ink-2); }
+  .ctl label{ font-family:var(--mono); font-size:9px; letter-spacing:.06em;
+    color:var(--ink-3); white-space:nowrap; }
+  .ctl input[type=range]{ -webkit-appearance:none; appearance:none;
+    width:118px; height:4px; border-radius:2px; background:var(--line-2);
+    outline:none; cursor:pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid var(--card); box-shadow:0 0 0 1px var(--jade); cursor:grab; }
+  .ctl input[type=range]::-moz-range-thumb{ width:13px; height:13px;
+    border-radius:50%; background:var(--jade); border:2.5px solid var(--card); cursor:grab; }
+  .ctl .val{ font-family:var(--mono); font-size:10.5px; color:var(--jade-d);
+    min-width:46px; text-align:right; }
+
+  .sw{ display:flex; align-items:center; gap:8px; cursor:pointer;
+    font-size:11.5px; color:var(--ink-2); user-select:none; }
+  .sw input{ position:absolute; opacity:0; width:0; height:0; }
+  .sw i{ width:34px; height:18px; border-radius:9px; background:var(--line-2);
+    position:relative; transition:background .15s; flex:0 0 34px; }
+  .sw i::after{ content:''; position:absolute; top:2px; left:2px;
+    width:14px; height:14px; border-radius:50%; background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.18); transition:transform .15s; }
+  .sw input:checked + i{ background:var(--jade); }
+  .sw input:checked + i::after{ transform:translateX(16px); }
+
+  @media (max-width:800px){
+    body{ padding:13px 13px 18px; }
+    .grid{ grid-template-columns:1fr; }
+    .ctrls{ gap:11px; }
+    .ctl{ width:100%; justify-content:space-between; }
+    .ctl input[type=range]{ flex:1; width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="kick">INTERACTIVE · 成像标准化</div>
+<h1>灯越亮，判级就越高——这不是模型的问题</h1>
+<p class="desc">
+  同一块样品，灯源功率一变，观测亮度就变，判级跟着变。
+  左边是<b>不做标准化</b>的读数，右边是<b>除以灯源系数</b>之后的读数。
+  这个旋钮就是「为什么先修成像，再谈算法」——它也能告诉你标准化的边界在哪：
+  <b>它能修增益，修不了信噪比，也修不了「没有分母」</b>。
+</p>
+
+<div class="grid">
+  <div class="stage">
+    <svg id="chart" viewBox="0 0 340 250" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="标准化前后的视野与判级"></svg>
+    <div class="cap">两个方块是同一块岩屑的拍摄结果：左为原始亮度，右为归一化后的亮度。下方色块是判级读数，深色块代表点亮的级别。</div>
+  </div>
+
+  <div class="side">
+    <div class="metrics" id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h5>三档灯下的判级</h5>
+      <table id="tbl"></table>
+    </div>
+    <div class="card">
+      <h5>标准化修不了什么</h5>
+      <p style="margin:0;font-size:9.6px;line-height:1.65;color:var(--ink-4)">
+        <b style="color:var(--ink-2)">① 灯太暗</b>：信号被噪声吃掉，
+        除以系数也救不回。<br>
+        <b style="color:var(--ink-2)">② 没有色卡</b>：不知道分母是多少，
+        标准化无从谈起。<br>
+        <b style="color:var(--ink-2)">③ 顶格饱和</b>：高级别在强光下本就顶格，
+        看起来「没问题」，其实掩盖了漂移。
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <div class="ctl">
+    <label>灯源功率</label>
+    <input type="range" id="s-lamp" min="60" max="160" step="5" value="100">
+    <span class="val" id="v-lamp">1.00×</span>
+  </div>
+  <div class="ctl">
+    <label>真实级别</label>
+    <input type="range" id="s-lv" min="1" max="4" step="1" value="2">
+    <span class="val" id="v-lv">2 级</span>
+  </div>
+  <label class="sw">
+    <input type="checkbox" id="s-calib" checked>
+    <i></i><span>参考色卡（已知灯源系数）</span>
+  </label>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SW = 340, SH = 250;
+  var NOISE = 0.32;          /* 固定的测量噪声（刻度单位） */
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  /* =========================================================
+     一、读数模型
+     ---------------------------------------------------------
+     measured = truth × lamp + noise
+     未标准化：round(measured) → 被灯带偏
+     标准化 ：round(measured / lamp) → 回到 truth 附近
+     ========================================================= */
+  function read(st) {
+    var lamp = st.lamp / 100;
+    var truth = st.level;
+    var meas = truth * lamp + NOISE;
+
+    var raw = clamp(Math.round(meas), 1, 4);
+    var est = st.calib ? lamp : 1.0;
+    var norm = clamp(Math.round(meas / est), 1, 4);
+
+    return {
+      lamp: lamp, truth: truth, meas: meas,
+      raw: raw, norm: norm,
+      errRaw: Math.abs(raw - truth),
+      errNorm: Math.abs(norm - truth),
+      glowRaw: clamp(0.16 + meas * 0.15, 0.05, 0.95),
+      glowNorm: clamp(0.16 + (meas / est) * 0.15, 0.05, 0.95)
+    };
+  }
+
+  /* =========================================================
+     二、绘制
+     ========================================================= */
+  function drawChart(r) {
+    var s = '', k;
+
+    s += '<rect width="' + SW + '" height="' + SH + '" fill="#ffffff"/>';
+
+    var rad = 18 + r.truth * 5;
+
+    /* 左：未标准化 */
+    s += '<rect x="10" y="18" width="150" height="110" rx="8" fill="#141414" stroke="#e9e4d8"/>';
+    s += '<circle cx="85" cy="73" r="' + rad.toFixed(1) + '" fill="#f4e6a8" ' +
+      'fill-opacity="' + r.glowRaw.toFixed(2) + '"/>';
+    s += '<text x="85" y="142" font-size="8.4" fill="#79828a" text-anchor="middle">未标准化视野</text>';
+    s += '<text x="85" y="155" font-size="8" fill="#b05a51" text-anchor="middle">亮度随灯变</text>';
+
+    /* 右：标准化 */
+    s += '<rect x="180" y="18" width="150" height="110" rx="8" fill="#141414" stroke="#e9e4d8"/>';
+    s += '<circle cx="255" cy="73" r="' + rad.toFixed(1) + '" fill="#f4e6a8" ' +
+      'fill-opacity="' + r.glowNorm.toFixed(2) + '"/>';
+    if (r.calibOk !== false) {
+      s += '<rect x="304" y="104" width="16" height="16" rx="2" fill="#f4e6a8" ' +
+        'fill-opacity=".6" stroke="#ffffff" stroke-width=".8"/>';
+    }
+    s += '<text x="255" y="142" font-size="8.4" fill="#79828a" text-anchor="middle">标准化后</text>';
+    s += '<text x="255" y="155" font-size="8" fill="' +
+      (r.errNorm === 0 ? '#235f51' : '#a97a1c') + '" text-anchor="middle">' +
+      (r.errNorm === 0 ? '只反映含油性' : '仍受噪声限制') + '</text>';
+
+    /* 判级条 1 */
+    var rows = [
+      { y: 168, label: '未标准化', val: r.raw, err: r.errRaw, col: '#b05a51' },
+      { y: 192, label: '标准化后', val: r.norm, err: r.errNorm,
+        col: r.errNorm === 0 ? '#2f7d6b' : '#a97a1c' }
+    ];
+
+    for (k = 0; k < 2; k++) {
+      var row = rows[k], i;
+      s += '<text x="10" y="' + (row.y + 12) + '" font-size="8.2" fill="#4d565b" ' +
+        'font-weight="600">' + row.label + '</text>';
+
+      for (i = 1; i <= 4; i++) {
+        var on = i <= row.val;
+        var bx = 76 + (i - 1) * 28;
+        s += '<rect x="' + bx + '" y="' + row.y + '" width="24" height="16" rx="3" fill="' +
+          (on ? row.col : '#f5f2ea') + '" fill-opacity="' +
+          (on ? (0.25 + i * 0.17).toFixed(2) : '1') + '" stroke="' +
+          (on ? row.col : '#e9e4d8') + '"/>';
+        s += '<text x="' + (bx + 12) + '" y="' + (row.y + 12) + '" font-size="9" ' +
+          'text-anchor="middle" font-family="ui-monospace,monospace" font-weight="600" ' +
+          'fill="' + (on ? '#ffffff' : '#9ba3a9') + '">' + i + '</text>';
+      }
+
+      s += '<text x="194" y="' + (row.y + 12) + '" font-size="8.2" fill="' + row.col +
+        '" font-weight="600">' + row.val + ' 级' +
+        (row.err ? '（错 ' + row.err + '）' : ' ✓') + '</text>';
+    }
+
+    /* 真实值 */
+    s += '<line x1="10" y1="218" x2="330" y2="218" stroke="#e9e4d8"/>';
+    s += '<text x="10" y="234" font-size="8.4" fill="#242b2e">真实级别 = ' +
+      r.truth + ' 级　·　观测亮度 = ' + r.meas.toFixed(2) + '</text>';
+    s += '<text x="330" y="234" font-size="8" fill="#9ba3a9" text-anchor="end" ' +
+      'font-family="ui-monospace,monospace">lamp ' + r.lamp.toFixed(2) + '×</text>';
+
+    document.getElementById('chart').innerHTML = s;
+  }
+
+  /* =========================================================
+     三、侧栏
+     ========================================================= */
+  function drawSide(r, st) {
+    var rawCls = r.errRaw ? 'bad' : 'good';
+    var normCls = r.errNorm ? 'warn' : 'good';
+
+    document.getElementById('metrics').innerHTML =
+      '<div class="metric ' + rawCls + '"><div class="l">未标准化判级</div>' +
+        '<div class="v">' + r.raw + '<small>级</small></div></div>' +
+      '<div class="metric ' + normCls + '"><div class="l">标准化后</div>' +
+        '<div class="v">' + r.norm + '<small>级</small></div></div>' +
+      '<div class="metric ' + (r.errNorm ? 'warn' : 'good') + '">' +
+        '<div class="l">判级误差</div><div class="v">' + r.errNorm +
+        '<small>级</small></div></div>' +
+      '<div class="metric"><div class="l">灯源系数</div>' +
+        '<div class="v">' + r.lamp.toFixed(2) + '<small>×</small></div></div>';
+
+    /* 判词 */
+    var vEl = document.getElementById('verdict'), html, vc;
+
+    if (!st.calib) {
+      vc = 'bad';
+      html = '没有参考色卡，就<b>不知道分母是多少</b>。两幅图现在完全一样——' +
+        '标准化不是「减去一个猜的数」，它必须有一个<b>可追溯的分母</b>。' +
+        '这也是为什么第 1 步里那块色卡值钱。';
+    } else if (r.errRaw === 0 && r.errNorm === 0) {
+      vc = 'ok';
+      html = '灯刚好在标定功率附近，两种做法一致。<b>把灯拉到 1.4× 以上再看</b>——' +
+        '差异会立刻出现，而且往往比人预期的更大。';
+    } else if (r.errNorm === 0 && r.errRaw > 0) {
+      vc = 'ok';
+      html = '灯 ' + r.lamp.toFixed(2) + '× 时，未标准化把 ' + r.truth +
+        ' 级判成 <b>' + r.raw + ' 级</b>，除以灯源系数后回到 <b>' + r.norm +
+        ' 级</b>。<b>这不是模型不准，是模型在量「灯有多亮」</b>。';
+    } else {
+      vc = 'warn';
+      html = '灯 ' + r.lamp.toFixed(2) + '× 时，标准化后仍然差 ' + r.errNorm +
+        ' 级。<b>因为灯太暗，信号已经被噪声吃掉了</b>——除以系数只能修增益，' +
+        '修不了信噪比。这时该做的是加长曝光或补光，不是继续调模型。';
+    }
+    vEl.className = 'verdict ' + vc;
+    vEl.innerHTML = html;
+
+    /* 三档灯 */
+    var rows = '', i;
+    var lamps = [0.6, 1.0, 1.6];
+    for (i = 0; i < 3; i++) {
+      var rr = read({ lamp: lamps[i] * 100, level: r.truth, calib: st.calib });
+      var cur = Math.abs(lamps[i] * 100 - st.lamp) < 12;
+      rows += '<tr><td' + (cur ? ' style="color:#242b2e;font-weight:600"' : '') + '>' +
+        '灯 ' + lamps[i].toFixed(1) + '×' + (cur ? ' ●' : '') + '</td>' +
+        '<td class="' + (rr.errRaw ? 'bad' : 'ok') + '">' + rr.raw + '</td>' +
+        '<td class="' + (rr.errNorm ? 'warn' : 'ok') + '">' + rr.norm + '</td></tr>';
+    }
+    document.getElementById('tbl').innerHTML =
+      '<thead><tr><th>条件</th><th>未标准化</th><th>标准化</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>';
+  }
+
+  /* =========================================================
+     四、主循环
+     ========================================================= */
+  var sLamp = document.getElementById('s-lamp');
+  var sLv = document.getElementById('s-lv');
+  var sCalib = document.getElementById('s-calib');
+  var vLamp = document.getElementById('v-lamp');
+  var vLv = document.getElementById('v-lv');
+
+  var state = { lamp: 100, level: 2, calib: true };
+
+  function paint() {
+    state.lamp = Number(sLamp.value);
+    state.level = Number(sLv.value);
+    state.calib = sCalib.checked;
+
+    vLamp.textContent = (state.lamp / 100).toFixed(2) + '×';
+    vLv.textContent = state.level + ' 级';
+
+    var r = read(state);
+    drawChart(r);
+    drawSide(r, state);
+  }
+
+  sLamp.addEventListener('input', paint);
+  sLv.addEventListener('input', paint);
+  sCalib.addEventListener('change', paint);
+
+  paint();
+
+})();
+</script>
+
+</body>
+</html>

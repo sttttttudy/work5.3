@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>荧光图像智能判读 · 颜色特征与含油分级</title>
+<style>
+  :root{
+    --jade:#2f8f7a; --jade-1:#eaf5f1; --jade-2:#c6e4da; --jade-3:#1f7261;
+    --clay:#b4653f; --clay-1:#fbf1ea; --clay-2:#eed6c6;
+    --ink:#1f2a30; --ink-1:#eef1f3; --ink-2:#d5dde1; --ink-3:#5b6b74; --ink-4:#9aa8b0;
+    --bg:#f4f6f6; --panel:#ffffff; --danger:#c0392b; --danger-1:#fbeae7;
+    --warn:#d4a017; --warn-1:#fdf8e7;
+    --blue:#2980b9; --blue-1:#eaf2f8;
+    --orange:#e67e22; --orange-1:#fdf2e9;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ height:100%; display:flex; flex-direction:column; background:var(--bg); }
+
+  .topbar{
+    height:42px; flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--ink-2);
+  }
+  .topbar .dot{ width:10px; height:10px; border-radius:50%; background:var(--jade); }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; }
+
+  .demo-layout{ flex:1; display:flex; gap:10px; padding:10px; min-height:0; }
+  .panel-ctrl{ flex:0 0 230px; width:230px; display:flex; flex-direction:column; gap:8px; }
+  .demo-stage{ flex:1; display:flex; flex-direction:column; gap:10px; min-width:0; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--ink-2); border-radius:10px;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .panel-title{
+    font-size:12.5px; font-weight:600; color:var(--ink-3);
+    padding:8px 12px; border-bottom:1px solid var(--ink-1);
+    display:flex; align-items:center; gap:6px;
+  }
+  .panel-title::before{ content:''; width:3px; height:12px; background:var(--jade); border-radius:2px; }
+
+  .ctrl-body{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+  .scenario-list { display:flex; flex-direction:column; gap:6px; }
+  .btn-scn {
+    width:100%; height:34px; border-radius:6px; font-size:12.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid var(--ink-2);
+    background:#fff; color:var(--ink-3); text-align:left; padding:0 10px;
+    display:flex; align-items:center; justify-content:space-between;
+    transition:all .15s ease;
+  }
+  .btn-scn:hover { background:var(--ink-1); }
+  .btn-scn.active { border-color:var(--jade); background:var(--jade-1); color:var(--jade-3); }
+
+  .field{ display:flex; flex-direction:column; gap:4px; margin-top:8px; }
+  .field-head{ display:flex; justify-content:space-between; font-size:12px; color:var(--ink-3); }
+  .field-head b{ color:var(--jade-3); font-family:monospace; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:2px;
+    background:var(--ink-2); outline:none; margin-top:4px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--jade); cursor:pointer;
+  }
+
+  .hint{ font-size:11.5px; color:var(--jade-3); background:var(--jade-1); padding:8px; border-radius:6px; line-height:1.5; }
+
+  .panel-main{ flex:1; min-height:0; }
+  .demo-bottom{ flex:0 0 180px; display:flex; gap:10px; }
+  .panel-color{ flex:1.2; min-width:0; }
+  .panel-met{ flex:1; min-width:0; padding:8px 12px; display:flex; flex-direction:column; justify-content:space-around; }
+
+  .svg-box{ flex:1; padding:4px; min-height:0; }
+  .svg-box svg{ width:100%; height:100%; display:block; }
+
+  .metric{ display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px dashed var(--ink-1); }
+  .metric:last-child{ border:none; }
+  .m-label{ font-size:12px; color:var(--ink-3); width:70px; }
+  .m-value{ font-size:15px; font-weight:600; font-family:monospace; }
+  .m-value.is-warn{ color:var(--warn); }
+  .m-value.is-bad{ color:var(--danger); }
+  .m-value.is-ok{ color:var(--jade-3); }
+  .badge{ display:inline-flex; align-items:center; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; }
+  .badge.ok{ color:var(--jade-3); background:var(--jade-1); }
+  .badge.warn{ color:var(--warn); background:var(--warn-1); }
+  .badge.bad{ color:var(--danger); background:var(--danger-1); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <span class="dot"></span>
+    <h1>荧光图像智能判读 · 颜色特征与含油分级</h1>
+  </div>
+
+  <div class="demo-layout">
+    <div class="panel-ctrl">
+      <div class="panel" style="flex:1">
+        <div class="panel-title">场景与参数</div>
+        <div class="ctrl-body">
+          <div class="scenario-list" id="scenario-list">
+            <button class="btn-scn active" data-scn="none"><span>无荧光</span><span style="color:var(--ink-4)">干层</span></button>
+            <button class="btn-scn" data-scn="spot"><span>油斑（1级）</span><span style="color:var(--warn)">弱</span></button>
+            <button class="btn-scn" data-scn="soak"><span>油浸（2-3级）</span><span style="color:var(--orange)">中</span></button>
+            <button class="btn-scn" data-scn="rich"><span>富含油（4级）</span><span style="color:var(--danger)">强</span></button>
+          </div>
+          
+          <div class="field">
+            <div class="field-head"><span>荧光强度</span><b id="v-int">0.8</b></div>
+            <input type="range" id="s-int" min="0" max="2" step="0.05" value="0.8">
+          </div>
+
+          <div class="hint">
+            <b>AI 逻辑：</b>提取图像中的黄/绿/蓝白光谱特征与亮度，映射到含油级别。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-stage">
+      <div class="panel panel-main">
+        <div class="panel-title">荧光显微图像（模拟紫外光激发）</div>
+        <div class="svg-box"><svg id="svg-image" viewBox="0 0 680 300" preserveAspectRatio="xMidYMid meet"></svg></div>
+      </div>
+      
+      <div class="demo-bottom">
+        <div class="panel panel-color">
+          <div class="panel-title">颜色与亮度特征</div>
+          <div class="svg-box"><svg id="svg-color" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid meet"></svg></div>
+        </div>
+        <div class="panel panel-met">
+          <div class="metric">
+            <div class="m-label">含油级别</div>
+            <div class="m-value" id="m-grade">—</div>
+          </div>
+          <div class="metric">
+            <div class="m-label">置信度</div>
+            <div class="m-value" id="m-conf">0<em>%</em></div>
+          </div>
+          <div class="metric">
+            <div class="m-label">主色调</div>
+            <div class="m-value" id="m-hue">—</div>
+          </div>
+          <div class="metric">
+            <div class="m-label">油质推断</div>
+            <div class="m-value" id="m-oil">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var state = {
+    intensity: 0.8,
+    scenario: 'spot',
+    dots: []
+  };
+
+  var els = {};
+
+  function q(id) { return document.getElementById(id); }
+
+  /* 根据场景和强度生成荧光点 */
+  function generateDots(scn, inten) {
+    var dots = [];
+    var count = 0, baseHue = '', baseColor = '';
+
+    if (scn === 'none') {
+      count = 0;
+      baseHue = '无';
+      baseColor = 'rgba(0,0,0,0)';
+    } else if (scn === 'spot') {
+      count = Math.round(20 * inten);
+      baseHue = '淡黄';
+      baseColor = '#f5e68c';
+    } else if (scn === 'soak') {
+      count = Math.round(45 * inten);
+      baseHue = '金黄';
+      baseColor = '#f0c24b';
+    } else if (scn === 'rich') {
+      count = Math.round(80 * inten);
+      baseHue = '亮黄/绿';
+      baseColor = '#e8d54a';
+    }
+
+    // 在圆形视场内随机生成
+    for (var i = 0; i < count; i++) {
+      var angle = Math.random() * Math.PI * 2;
+      var r = Math.sqrt(Math.random()) * 120; // 视场半径 120
+      var x = 340 + Math.cos(angle) * r;
+      var y = 150 + Math.sin(angle) * r;
+      
+      // 大小与亮度随强度变化
+      var size = 1 + Math.random() * 4 + (scn === 'rich' ? 3 : 0);
+      var opacity = 0.3 + Math.random() * 0.7;
+      
+      // 颜色变化：油质不同颜色微调
+      var color = baseColor;
+      if (scn === 'rich' && Math.random() > 0.7) color = '#8cd98c'; // 少量绿色
+      
+      dots.push({ x: x, y: y, size: size, color: color, opacity: opacity });
+    }
+
+    return { dots: dots, hue: baseHue };
+  }
+
+  /* 渲染荧光图像 */
+  function renderImage() {
+    var W = 680, H = 300;
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#1a1a1a"/>'); // 紫外光暗背景
+    
+    // 视场圆形边框
+    p.push('<circle cx="340" cy="150" r="135" fill="none" stroke="#3a3a3a" stroke-width="2"/>');
+    p.push('<circle cx="340" cy="150" r="130" fill="none" stroke="#2a2a2a" stroke-width="1"/>');
+
+    // 绘制荧光点
+    for (var i = 0; i < state.dots.length; i++) {
+      var d = state.dots[i];
+      p.push('<circle cx="' + d.x.toFixed(1) + '" cy="' + d.y.toFixed(1) + '" r="' + d.size.toFixed(1) + '" fill="' + d.color + '" opacity="' + d.opacity.toFixed(2) + '"/>');
+    }
+
+    // 标签
+    p.push('<text x="20" y="30" fill="#9aa8b0" font-size="12">紫外光激发 · 荧光图像</text>');
+    
+    return p.join('');
+  }
+
+  /* 渲染颜色特征图 */
+  function renderColor() {
+    var W = 300, H = 150;
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>');
+
+    if (state.scenario === 'none' || state.dots.length === 0) {
+      p.push('<text x="150" y="75" text-anchor="middle" font-size="14" fill="#9aa8b0">无荧光显示</text>');
+      return p.join('');
+    }
+
+    // 计算平均颜色（简化：用几个色块代表分布）
+    var colors = state.dots.map(function(d) { return d.color; });
+    var unique = colors.filter(function(v, i, a) { return a.indexOf(v) === i; });
+    
+    // 绘制色块条
+    var barY = 20, barH = 40;
+    var n = Math.min(unique.length, 4);
+    var segW = (W - 40) / n;
+    
+    for (var i = 0; i < n; i++) {
+      p.push('<rect x="' + (20 + i * segW) + '" y="' + barY + '" width="' + (segW - 2) + '" height="' + barH + '" fill="' + unique[i] + '" rx="4"/>');
+    }
+
+    // 亮度条
+    var bright = state.intensity;
+    p.push('<rect x="20" y="80" width="' + (W - 40) + '" height="10" rx="5" fill="#f0f3f4"/>');
+    p.push('<rect x="20" y="80" width="' + ((W - 40) * bright / 2) + '" height="10" rx="5" fill="' + (bright > 1 ? '#c0392b' : '#2f8f7a') + '"/>');
+    p.push('<text x="20" y="105" font-size="11" fill="#5b6b74">亮度 (相对强度)</text>');
+
+    p.push('<text x="20" y="130" font-size="12" fill="#5b6b74">主色调：' + (state.scenario === 'spot' ? '淡黄' : state.scenario === 'soak' ? '金黄' : '亮黄绿') + '</text>');
+    
+    return p.join('');
+  }
+
+  /* 更新指标面板 */
+  function updateMetrics() {
+    var scn = state.scenario;
+    var grade = '—', conf = 95, hue = '—', oil = '—';
+    var gradeClass = '';
+
+    if (scn === 'none') { grade = '无显示'; conf = 99; hue = '无'; oil = '干层'; gradeClass = ''; }
+    else if (scn === 'spot') { grade = '1级（油斑）'; conf = 88; hue = '淡黄'; oil = '轻质油'; gradeClass = 'is-warn'; }
+    else if (scn === 'soak') { grade = '2-3级（油浸）'; conf = 92; hue = '金黄'; oil = '中质油'; gradeClass = 'is-warn'; }
+    else if (scn === 'rich') { grade = '4级（富含油）'; conf = 96; hue = '亮黄/绿'; oil = '重质油'; gradeClass = 'is-bad'; }
+
+    // 低强度时置信度下降（模拟环境光影响）
+    if (state.intensity < 0.3 && scn !== 'none') conf -= 15;
+
+    els.mGrade.textContent = grade;
+    els.mGrade.className = 'm-value ' + gradeClass;
+    els.mConf.innerHTML = conf + '<em>%</em>';
+    els.mConf.className = 'm-value ' + (conf >= 85 ? 'is-ok' : 'is-warn');
+    els.mHue.textContent = hue;
+    els.mOil.textContent = oil;
+  }
+
+  function updateUI() {
+    state.dots = generateDots(state.scenario, state.intensity).dots;
+    els.svgImage.innerHTML = renderImage();
+    els.svgColor.innerHTML = renderColor();
+    updateMetrics();
+  }
+
+  function onScenario(scn) {
+    state.scenario = scn;
+    
+    // 设置推荐强度
+    if (scn === 'none') state.intensity = 0.0;
+    else if (scn === 'spot') state.intensity = 0.6;
+    else if (scn === 'soak') state.intensity = 1.0;
+    else if (scn === 'rich') state.intensity = 1.6;
+    
+    els.sInt.value = state.intensity;
+    els.vInt.textContent = state.intensity.toFixed(2);
+    
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].getAttribute('data-scn') === scn);
+    }
+    
+    updateUI();
+  }
+
+  function init() {
+    els.svgImage = q('svg-image');
+    els.svgColor = q('svg-color');
+    els.sInt = q('s-int');
+    els.vInt = q('v-int');
+    els.mGrade = q('m-grade');
+    els.mConf = q('m-conf');
+    els.mHue = q('m-hue');
+    els.mOil = q('m-oil');
+
+    // 强度滑块
+    els.sInt.addEventListener('input', function() {
+      state.intensity = parseFloat(this.value);
+      els.vInt.textContent = state.intensity.toFixed(2);
+      updateUI();
+    });
+
+    // 场景按钮
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          onScenario(this.getAttribute('data-scn'));
+        });
+      })(btns[i]);
+    }
+
+    // 默认场景
+    onScenario('spot');
+  }
+
+  // 生命周期钩子
+  window.__CASE_MOUNT__ = function () {
+    if (!els.svgImage || !els.svgImage.innerHTML) init();
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>

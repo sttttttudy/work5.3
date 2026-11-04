@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>井下复杂事故前兆预警 · 多变量时序异常检测</title>
+<style>
+  :root{
+    --jade:#2f8f7a; --jade-1:#eaf5f1; --jade-2:#c6e4da; --jade-3:#1f7261;
+    --clay:#b4653f; --clay-1:#fbf1ea; --clay-2:#eed6c6;
+    --ink:#1f2a30; --ink-1:#eef1f3; --ink-2:#d5dde1; --ink-3:#5b6b74; --ink-4:#9aa8b0;
+    --bg:#f4f6f6; --panel:#ffffff; --danger:#c0392b; --danger-1:#fbeae7;
+    --warn:#d4a017; --warn-1:#fdf8e7;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:15px; line-height:1.6;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ height:100%; display:flex; flex-direction:column; background:var(--bg); }
+
+  .topbar{
+    height:42px; flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--ink-2);
+  }
+  .topbar .dot{ width:10px; height:10px; border-radius:50%; background:var(--jade); box-shadow:0 0 0 3px var(--jade-1); }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar .scene{ margin-left:auto; font-size:12px; color:var(--ink-4); font-family:ui-monospace,Menlo,monospace; }
+
+  .panes{ flex:1 1 auto; min-height:0; position:relative; }
+  .pane{ height:100%; overflow:auto; padding:12px; }
+  .pane::-webkit-scrollbar{ width:8px; height:8px; }
+  .pane::-webkit-scrollbar-thumb{ background:var(--ink-2); border-radius:4px; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--ink-2); border-radius:10px;
+    display:flex; flex-direction:column; min-height:0; min-width:0; overflow:hidden;
+  }
+  .panel-title{
+    flex:0 0 auto; font-size:13px; font-weight:600; color:var(--ink-3);
+    padding:9px 14px 8px; border-bottom:1px solid var(--ink-1);
+    display:flex; align-items:center; gap:7px;
+  }
+  .panel-title::before{ content:''; width:3px; height:14px; border-radius:2px; background:var(--jade); }
+  .svg-box{ flex:1 1 auto; min-height:0; padding:5px 8px 7px; }
+  .svg-box svg{ width:100%; height:100%; display:block; }
+
+  .demo-layout{ display:flex; gap:12px; height:100%; min-height:0; }
+  .panel-ctrl{ flex:0 0 238px; width:238px; }
+  .ctrl-body{ flex:1 1 auto; min-height:0; overflow:auto; padding:10px 13px 14px; }
+
+  .scenario-list { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+  .btn-scn {
+    width:100%; height:34px; border-radius:6px; font-size:12.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid var(--ink-2);
+    background:#fff; color:var(--ink-3); text-align:left; padding:0 10px;
+    transition:all .15s ease;
+  }
+  .btn-scn:hover { background:var(--ink-1); }
+  .btn-scn.active { border-color:var(--jade); background:var(--jade-1); color:var(--jade-3); }
+
+  .field{ margin-bottom:14px; }
+  .field-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:5px; }
+  .field-head span{ font-size:13px; color:var(--ink-3); }
+  .field-head b{ font-size:13.5px; font-weight:600; color:var(--jade-3); font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,monospace; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:3px;
+    background:linear-gradient(90deg,var(--jade-2),var(--ink-1)); outline:none; cursor:pointer; margin:5px 0 0;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:17px; height:17px; border-radius:50%;
+    background:var(--jade); border:2.5px solid #fff; box-shadow:0 1px 4px rgba(31,42,48,.28); cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px; height:15px; border-radius:50%; background:var(--jade);
+    border:2.5px solid #fff; box-shadow:0 1px 4px rgba(31,42,48,.28); cursor:pointer;
+  }
+
+  .btn{
+    width:100%; height:38px; border-radius:8px; font-size:13.5px; font-weight:600;
+    font-family:inherit; cursor:pointer; border:1px solid transparent;
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .btn-primary{ background:var(--jade); color:#fff; box-shadow:0 2px 8px rgba(47,143,122,.24); }
+  .btn-primary:hover{ background:var(--jade-3); }
+  .btn-primary:disabled{ opacity:.62; cursor:progress; box-shadow:none; }
+
+  .hint{
+    margin-top:12px; padding:9px 11px; background:var(--jade-1);
+    border:1px solid var(--jade-2); border-radius:8px;
+    font-size:12.5px; line-height:1.65; color:var(--jade-3);
+  }
+  .hint b{ font-weight:600; }
+
+  .demo-stage{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:12px; min-height:0; }
+  .panel-main{ flex:1 1 auto; min-height:0; }
+  .demo-bottom{ flex:0 0 210px; height:210px; display:flex; gap:12px; }
+  .panel-score{ flex:1.1 1 0; min-width:0; }
+  .panel-met{ flex:1 1 0; min-width:0; }
+
+  .metrics{ flex:1 1 auto; min-height:0; padding:4px 13px 8px; display:flex; flex-direction:column; justify-content:space-around; }
+  .metric{ display:flex; align-items:center; gap:9px; padding:4px 0; border-bottom:1px dashed var(--ink-1); }
+  .metric:last-child{ border-bottom:none; }
+  .m-label{ flex:0 0 82px; font-size:12.5px; color:var(--ink-3); white-space:nowrap; }
+  .m-value{ font-size:17px; font-weight:600; font-family:ui-monospace,Menlo,monospace; white-space:nowrap; }
+  .m-value em{ font-style:normal; font-size:11.5px; font-weight:500; color:var(--ink-4); margin-left:1px; }
+  .m-value.is-ok{ color:var(--jade-3); }
+  .m-value.is-warn{ color:var(--warn); }
+  .m-value.is-bad{ color:var(--danger); }
+  .m-sub{ margin-left:auto; font-size:11.5px; color:var(--ink-4); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .badge{ display:inline-flex; align-items:center; gap:5px; padding:2px 11px; border-radius:20px; font-size:13.5px; font-weight:600; }
+  .badge::before{ content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .badge.ok{ color:var(--jade-3); background:var(--jade-1); }
+  .badge.warn{ color:var(--warn); background:var(--warn-1); }
+  .badge.bad{ color:var(--danger); background:var(--danger-1); }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="wrap">
+  <header class="topbar">
+    <span class="dot"></span>
+    <h1>井下复杂事故前兆预警 · 多变量时序异常检测与可解释分级</h1>
+    <span class="scene">sceneId: s4-d2</span>
+  </header>
+
+  <div class="panes">
+    <section class="pane active" id="pane-demo">
+      <div class="demo-layout">
+        <aside class="panel panel-ctrl">
+          <div class="panel-title">场景与时间</div>
+          <div class="ctrl-body">
+            <div class="scenario-list" id="scenario-list">
+              <button class="btn-scn active" data-scn="normal"><span>正常钻进</span></button>
+              <button class="btn-scn" data-scn="stuck"><span>卡钻前兆</span></button>
+              <button class="btn-scn" data-scn="loss"><span>井漏前兆</span></button>
+              <button class="btn-scn" data-scn="kick"><span>气侵前兆</span></button>
+            </div>
+            <div class="field">
+              <div class="field-head"><span>时间轴 (s)</span><b id="v-time">0</b></div>
+              <input type="range" id="s-time" min="0" max="120" step="1" value="0" />
+            </div>
+            <button class="btn btn-primary" id="btn-play" type="button">▶ 播放</button>
+            <div class="hint" style="margin-top:14px;">
+              <b>可解释预警：</b>异常评分超过 30 触发黄色预警，超过 65 触发红色警报；下方会显示主导诱因，帮助司钻快速定位。
+            </div>
+          </div>
+        </aside>
+
+        <div class="demo-stage">
+          <section class="panel panel-main">
+            <div class="panel-title">多通道时序曲线（灰带为正常基线包络）</div>
+            <div class="svg-box"><svg id="svg-main" viewBox="0 0 680 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg></div>
+          </section>
+          <div class="demo-bottom">
+            <section class="panel panel-score">
+              <div class="panel-title">异常评分与通道贡献</div>
+              <div class="svg-box"><svg id="svg-score" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg></div>
+            </section>
+            <section class="panel panel-met">
+              <div class="panel-title">预警面板</div>
+              <div class="metrics">
+                <div class="metric">
+                  <div class="m-label">异常评分</div>
+                  <div class="m-value" id="m-score">0<em>分</em></div>
+                  <div class="m-sub" id="m-score-sub">阈值 30 / 65</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">预警等级</div>
+                  <div class="m-value" id="m-level"><span class="badge ok">正常</span></div>
+                  <div class="m-sub" id="m-level-sub">系统平稳</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">主导诱因</div>
+                  <div class="m-value" id="m-cause" style="font-size:14px; color:var(--ink-3);">—</div>
+                  <div class="m-sub" id="m-cause-sub">贡献度最高通道</div>
+                </div>
+                <div class="metric">
+                  <div class="m-label">置信度</div>
+                  <div class="m-value" id="m-conf">0<em>%</em></div>
+                  <div class="m-sub" id="m-conf-sub">模型判断确信程度</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var MAX_TIME = 120;
+  var state = {
+    time: 0,
+    scenario: 'normal',
+    playing: false,
+    data: []
+  };
+
+  var els = {}, listeners = [], timers = [], mounted = false;
+
+  function q(id) { return document.getElementById(id); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function f1(n) { return isFinite(n) ? Number(n).toFixed(1) : '—'; }
+  function f0(n) { return isFinite(n) ? Number(n).toFixed(0) : '—'; }
+
+  /* 生成模拟多通道数据：时间 0-120s，每秒 1 点 */
+  function generateData(scn) {
+    var data = [];
+    var i, t, torque, pressure, flow, rpm;
+    var baseTorque = 12, basePressure = 22, baseFlow = 32, baseRpm = 80;
+
+    for (i = 0; i <= MAX_TIME; i++) {
+      t = i;
+      // 正常波动
+      torque = baseTorque + Math.sin(t * 0.15) * 1.2 + Math.random() * 0.8;
+      pressure = basePressure + Math.cos(t * 0.12) * 0.8 + Math.random() * 0.4;
+      flow = baseFlow + Math.sin(t * 0.2) * 1.5 + Math.random() * 0.6;
+      rpm = baseRpm + Math.cos(t * 0.1) * 2 + Math.random() * 0.8;
+
+      // 接单根干扰：20-22s 和 50-52s 短暂波动
+      if ((t >= 20 && t <= 22) || (t >= 50 && t <= 52)) {
+        pressure += 3;
+        flow -= 2;
+      }
+
+      // 事故前兆注入：约 60s 开始逐渐显现
+      if (scn === 'stuck' && t >= 60) {
+        var ramp = Math.min(1, (t - 60) / 30);
+        torque += ramp * 8;
+        rpm -= ramp * 15;
+        pressure += ramp * 2;
+      } else if (scn === 'loss' && t >= 60) {
+        var ramp = Math.min(1, (t - 60) / 30);
+        pressure -= ramp * 6;
+        flow -= ramp * 10;
+        torque += ramp * 2;
+      } else if (scn === 'kick' && t >= 60) {
+        var ramp = Math.min(1, (t - 60) / 30);
+        flow += ramp * 8;
+        pressure -= ramp * 3;
+        torque -= ramp * 1.5;
+      }
+
+      data.push({
+        time: t,
+        torque: torque,
+        pressure: pressure,
+        flow: flow,
+        rpm: rpm
+      });
+    }
+
+    return data;
+  }
+
+  /* 计算异常评分与通道贡献 */
+  function computeScore(data, tIdx) {
+    var pt = data[tIdx];
+    // 简单基线：前 50s 的均值与标准差
+    var n = 50;
+    var sumT = 0, sumP = 0, sumF = 0, sumR = 0;
+    var sumT2 = 0, sumP2 = 0, sumF2 = 0, sumR2 = 0;
+    for (var i = 0; i < n; i++) {
+      var d = data[i];
+      sumT += d.torque; sumP += d.pressure; sumF += d.flow; sumR += d.rpm;
+      sumT2 += d.torque * d.torque; sumP2 += d.pressure * d.pressure;
+      sumF2 += d.flow * d.flow; sumR2 += d.rpm * d.rpm;
+    }
+    var meanT = sumT / n, meanP = sumP / n, meanF = sumF / n, meanR = sumR / n;
+    var stdT = Math.sqrt(sumT2 / n - meanT * meanT) || 1;
+    var stdP = Math.sqrt(sumP2 / n - meanP * meanP) || 1;
+    var stdF = Math.sqrt(sumF2 / n - meanF * meanF) || 1;
+    var stdR = Math.sqrt(sumR2 / n - meanR * meanR) || 1;
+
+    // 使用最近 5 个点的均值平滑，降低噪声
+    var win = 5;
+    var start = Math.max(0, tIdx - win + 1);
+    var count = 0;
+    var avgT = 0, avgP = 0, avgF = 0, avgR = 0;
+    for (var j = start; j <= tIdx; j++) {
+      avgT += data[j].torque;
+      avgP += data[j].pressure;
+      avgF += data[j].flow;
+      avgR += data[j].rpm;
+      count++;
+    }
+    avgT /= count; avgP /= count; avgF /= count; avgR /= count;
+
+    var zT = Math.abs(avgT - meanT) / stdT;
+    var zP = Math.abs(avgP - meanP) / stdP;
+    var zF = Math.abs(avgF - meanF) / stdF;
+    var zR = Math.abs(avgR - meanR) / stdR;
+
+    // 加权融合，放大显著偏离
+    var rawScore = zT * 18 + zP * 15 + zF * 20 + zR * 10;
+    var score = clamp(rawScore, 0, 100);
+
+    // 通道贡献占比
+    var total = zT + zP + zF + zR || 1;
+    var contrib = {
+      torque: zT / total,
+      pressure: zP / total,
+      flow: zF / total,
+      rpm: zR / total
+    };
+
+    // 主导诱因
+    var cause = '—';
+    var maxC = 0;
+    var causeKey = '';
+    for (var key in contrib) {
+      if (contrib[key] > maxC) { maxC = contrib[key]; causeKey = key; }
+    }
+    if (score > 30) {
+      if (causeKey === 'torque') cause = '扭矩异常';
+      else if (causeKey === 'pressure') cause = '立管压力异常';
+      else if (causeKey === 'flow') cause = '返出流量异常';
+      else if (causeKey === 'rpm') cause = '转速异常';
+    }
+
+    // 置信度：偏离越大越置信
+    var conf = clamp(55 + score * 0.45, 0, 99);
+
+    return {
+      score: score,
+      contrib: contrib,
+      cause: cause,
+      conf: conf,
+      z: { torque: zT, pressure: zP, flow: zF, rpm: zR }
+    };
+  }
+
+  /* 渲染主图：4 通道曲线 + 正常基线包络 */
+  function renderMain() {
+    var W = 680, H = 300;
+    var ML = 60, MR = 30, MT = 20, MB = 35;
+    var pw = W - ML - MR, ph = H - MT - MB;
+    var p = [];
+    p.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>');
+
+    var tMax = MAX_TIME;
+    function tx(t) { return ML + t / tMax * pw; }
+
+    // 4 个通道的 y 映射
+    var channels = [
+      { key: 'torque', label: '扭矩 (kN·m)', color: '#c0392b', min: 8, max: 25 },
+      { key: 'pressure', label: '立管压力 (MPa)', color: '#b4653f', min: 14, max: 30 },
+      { key: 'flow', label: '返出流量 (L/s)', color: '#2f8f7a', min: 18, max: 45 },
+      { key: 'rpm', label: '转速 (r/min)', color: '#2980b9', min: 50, max: 95 }
+    ];
+
+    var hEach = ph / channels.length;
+    var chartH = hEach - 18;
+
+    for (var ci = 0; ci < channels.length; ci++) {
+      var ch = channels[ci];
+      var cy = MT + ci * hEach;
+      var scaleY = function (v) { return cy + chartH - (clamp(v, ch.min, ch.max) - ch.min) / (ch.max - ch.min) * chartH; };
+
+      // 通道背景
+      p.push('<rect x="' + ML + '" y="' + cy + '" width="' + pw + '" height="' + chartH + '" fill="#fafbfb" stroke="#eef1f3" stroke-width="1"/>');
+
+      // 通道标签
+      p.push('<text x="' + (ML - 8) + '" y="' + (cy + chartH / 2 + 4) + '" text-anchor="end" font-size="10.5" fill="#5b6b74">' + ch.label + '</text>');
+
+      // 正常基线包络（用前 50s 的均值 ± 2 倍标准差近似）
+      var n = 50;
+      var sum = 0, sum2 = 0;
+      for (var i = 0; i < n; i++) {
+        var v = state.data[i][ch.key];
+        sum += v; sum2 += v * v;
+      }
+      var mean = sum / n;
+      var std = Math.sqrt(sum2 / n - mean * mean) || 0.1;
+      var lo = mean - 2 * std, hi = mean + 2 * std;
+      p.push('<rect x="' + ML + '" y="' + scaleY(hi) + '" width="' + pw + '" height="' + Math.max(0, scaleY(lo) - scaleY(hi)) + '" fill="#eef1f3" opacity="0.6"/>');
+
+      // 曲线
+      var d = '';
+      for (var j = 0; j < state.data.length; j++) {
+        var val = state.data[j][ch.key];
+        d += (j === 0 ? 'M' : 'L') + tx(state.data[j].time) + ',' + scaleY(val);
+      }
+      p.push('<path d="' + d + '" fill="none" stroke="' + ch.color + '" stroke-width="1.8" stroke-linejoin="round"/>');
+
+      // 当前时间点标记
+      var curVal = state.data[state.time][ch.key];
+      p.push('<circle cx="' + tx(state.time) + '" cy="' + scaleY(curVal) + '" r="3.5" fill="' + ch.color + '" stroke="#fff" stroke-width="1.5"/>');
+    }
+
+    // 时间轴
+    for (var gi = 0; gi <= 4; gi++) {
+      var gv = gi * 30;
+      p.push('<line x1="' + tx(gv) + '" y1="' + MT + '" x2="' + tx(gv) + '" y2="' + (MT + ph) + '" stroke="#eef1f3" stroke-width="1"/>');
+      p.push('<text x="' + tx(gv) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="#9aa8b0">' + gv + 's</text>');
+    }
+
+    return p.join('');
+  }
+
+  /* 底部左：异常评分仪表 + 通道贡献条 */
+  function renderScore() {
+    var W = 300, H = 160;
+    var p = ['<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>'];
+    var res = computeScore(state.data, state.time);
+    var score = res.score;
+
+    // 异常评分大数字
+    var color = score > 65 ? '#c0392b' : (score > 30 ? '#d4a017' : '#2f8f7a');
+    p.push('<text x="150" y="30" text-anchor="middle" font-size="14" fill="#5b6b74">异常评分</text>');
+    p.push('<text x="150" y="68" text-anchor="middle" font-size="38" font-weight="700" fill="' + color + '">' + f0(score) + '</text>');
+
+    // 通道贡献条
+    var items = [
+      { key: 'torque', label: '扭矩', color: '#c0392b', val: res.contrib.torque },
+      { key: 'pressure', label: '立压', color: '#b4653f', val: res.contrib.pressure },
+      { key: 'flow', label: '流量', color: '#2f8f7a', val: res.contrib.flow },
+      { key: 'rpm', label: '转速', color: '#2980b9', val: res.contrib.rpm }
+    ];
+
+    var barY = 92;
+    var barH = 12;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var y = barY + i * 16;
+      p.push('<text x="20" y="' + (y + 9) + '" font-size="10" fill="#5b6b74">' + it.label + '</text>');
+      p.push('<rect x="60" y="' + y + '" width="180" height="' + barH + '" rx="3" fill="#f0f3f4"/>');
+      p.push('<rect x="60" y="' + y + '" width="' + (it.val * 180).toFixed(1) + '" height="' + barH + '" rx="3" fill="' + it.color + '" opacity="0.8"/>');
+      p.push('<text x="248" y="' + (y + 9) + '" font-size="9.5" fill="#5b6b74">' + f0(it.val * 100) + '%</text>');
+    }
+
+    return p.join('');
+  }
+
+  function renderMetrics() {
+    var res = computeScore(state.data, state.time);
+    var score = res.score;
+    var level = '正常', levelCls = 'ok', levelSub = '系统平稳';
+    if (score > 65) { level = '红色警报'; levelCls = 'bad'; levelSub = '立即检查'; }
+    else if (score > 30) { level = '黄色预警'; levelCls = 'warn'; levelSub = '加强监控'; }
+
+    if (els.mScore) {
+      els.mScore.innerHTML = f0(score) + '<em>分</em>';
+      els.mScore.className = 'm-value ' + (score > 65 ? 'is-bad' : (score > 30 ? 'is-warn' : 'is-ok'));
+    }
+    if (els.mLevel) {
+      els.mLevel.innerHTML = '<span class="badge ' + levelCls + '">' + level + '</span>';
+      els.mLevelSub.textContent = levelSub;
+    }
+    if (els.mCause) {
+      els.mCause.textContent = res.cause;
+      els.mCause.style.color = res.cause !== '—' ? 'var(--danger)' : 'var(--ink-3)';
+      els.mCauseSub.textContent = res.cause !== '—' ? '贡献度最高通道' : '—';
+    }
+    if (els.mConf) {
+      els.mConf.innerHTML = f0(res.conf) + '<em>%</em>';
+    }
+  }
+
+  function updateUI() {
+    if (els.svgMain) els.svgMain.innerHTML = renderMain();
+    if (els.svgScore) els.svgScore.innerHTML = renderScore();
+    renderMetrics();
+    if (els.vTime) els.vTime.textContent = state.time;
+    if (els.sTime) els.sTime.value = state.time;
+  }
+
+  /* 交互 */
+  function onScenario(scn) {
+    state.scenario = scn;
+    state.data = generateData(scn);
+    state.time = 0;
+    state.playing = false;
+    if (els.btnPlay) els.btnPlay.textContent = '▶ 播放';
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].getAttribute('data-scn') === scn);
+    }
+    updateUI();
+  }
+
+  function onTimeChange() {
+    state.time = parseInt(els.sTime.value, 10);
+    updateUI();
+  }
+
+  function onPlay() {
+    if (state.playing) {
+      state.playing = false;
+      if (els.btnPlay) els.btnPlay.textContent = '▶ 播放';
+      return;
+    }
+    state.playing = true;
+    if (els.btnPlay) els.btnPlay.textContent = '⏸ 暂停';
+    var t = setInterval(function () {
+      if (!state.playing) { clearInterval(t); return; }
+      state.time += 1;
+      if (state.time > MAX_TIME) {
+        state.time = MAX_TIME;
+        state.playing = false;
+        if (els.btnPlay) els.btnPlay.textContent = '▶ 播放';
+        clearInterval(t);
+      }
+      updateUI();
+    }, 120);
+    timers.push(t);
+  }
+
+  function addL(el, ev, fn) { if (el) { el.addEventListener(ev, fn, false); listeners.push([el, ev, fn]); } }
+
+  function init() {
+    els.svgMain = q('svg-main'); els.svgScore = q('svg-score');
+    els.sTime = q('s-time'); els.vTime = q('v-time');
+    els.btnPlay = q('btn-play');
+    els.mScore = q('m-score'); els.mScoreSub = q('m-score-sub');
+    els.mLevel = q('m-level'); els.mLevelSub = q('m-level-sub');
+    els.mCause = q('m-cause'); els.mCauseSub = q('m-cause-sub');
+    els.mConf = q('m-conf'); els.mConfSub = q('m-conf-sub');
+
+    state.data = generateData('normal');
+    state.time = 0;
+
+    addL(els.sTime, 'input', onTimeChange);
+    addL(els.btnPlay, 'click', onPlay);
+
+    var btns = document.querySelectorAll('.btn-scn');
+    for (var i = 0; i < btns.length; i++) {
+      (function (btn) {
+        addL(btn, 'click', function () { onScenario(btn.getAttribute('data-scn')); });
+      })(btns[i]);
+    }
+
+    updateUI();
+  }
+
+  function destroy() {
+    var i;
+    for (i = 0; i < listeners.length; i++) { try { listeners[i][0].removeEventListener(listeners[i][1], listeners[i][2], false); } catch (e) {} }
+    listeners = [];
+    for (i = 0; i < timers.length; i++) clearInterval(timers[i]);
+    timers = [];
+    if (els.svgMain) els.svgMain.innerHTML = '';
+    if (els.svgScore) els.svgScore.innerHTML = '';
+    els = {}; state.playing = false;
+  }
+
+  window.__CASE_MOUNT__ = function () {
+    if (mounted) return;
+    mounted = true;
+    try { init(); } catch (e) { mounted = false; if (window.console && console.error) console.error('[s4-d2] mount failed:', e); }
+  };
+  window.__CASE_UNMOUNT__ = function () {
+    if (!mounted) return;
+    mounted = false;
+    try { destroy(); } catch (e) { if (window.console && console.error) console.error('[s4-d2] unmount failed:', e); }
+  };
+
+  function boot() { if (!mounted) window.__CASE_MOUNT__(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, false);
+  else boot();
+  window.addEventListener('pagehide', function () { window.__CASE_UNMOUNT__(); }, false);
+
+})();
+</script>
+</body>
+</html>
